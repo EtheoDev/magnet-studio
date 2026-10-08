@@ -55,3 +55,7 @@ A aprovação topológica não é uma auditoria completa de auto-interseções o
 - `.openai/hosting.json`: configuração do site privado.
 
 
+
+## GitHub Pages
+
+Veja [o guia para GitHub Actions e publicação por branch](docs/GITHUB-PAGES.md). O site precisa ser compilado antes da publicação.
