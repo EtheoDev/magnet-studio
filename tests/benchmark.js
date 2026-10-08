@@ -1,0 +1,20 @@
+import Module from 'manifold-3d';
+import { MeshBVH } from 'three-mesh-bvh';
+import { writeFileSync } from 'node:fs';
+import { parseSTL, toManifold, fromManifold, cutCavities, binarySTL, toGeometry } from '../src/geometry.js';
+const m=await Module();m.setup();
+// Geodesic sphere avoids a coplanar grid being simplified down to a tiny mesh.
+const sphere=m.Manifold.sphere(40,1024);
+const source=fromManifold(sphere);sphere.delete();
+const stl=binarySTL(source),start=performance.now();
+const parsed=parseSTL(stl),parseMs=performance.now()-start;
+let t=performance.now();const base=toManifold(m,parsed),validateMs=performance.now()-t;
+t=performance.now();const geometry=toGeometry(parsed);const bvh=new MeshBVH(geometry);const bvhMs=performance.now()-t;
+const cavities=[{id:'bench',point:[0,0,40],normal:[0,0,1],diameter:6,thickness:3,diameterAllowance:.2,depthAllowance:.1}];
+t=performance.now();const cut=cutCavities(m,base,cavities);const result=fromManifold(cut),cutMs=performance.now()-t;
+t=performance.now();const exported=binarySTL(result,parsed.offset),exportMs=performance.now()-t;
+const round=toManifold(m,parseSTL(exported));
+const report={date:'2026-10-07',runtime:process.version,platform:process.platform,architecture:process.arch,inputTriangles:source.indices.length/3,inputMB:stl.byteLength/1e6,outputTriangles:result.indices.length/3,parseMs,validateMs,bvhMs,cutMs,exportMs,roundtripStatus:round.status(),removedVolume:base.volume()-cut.volume(),note:'Synthetic closed sphere; timings in Node.js on this host, not a browser SLA or arbitrary-STL guarantee.'};
+console.log(JSON.stringify(report,null,2));writeFileSync('tests/benchmark-result.json',JSON.stringify(report,null,2)+'\n');
+writeFileSync('../../work/benchmark-524k.stl',new Uint8Array(stl));
+geometry.dispose();round.delete();cut.delete();base.delete();

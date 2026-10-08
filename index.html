@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#10151b"><meta name="description" content="Transforme seu STL em uma peça pronta para ímãs. Posicione cavidades sobre a superfície e exporte o modelo, com processamento local."><link rel="icon" href="./magnetlab-symbol.svg" type="image/svg+xml"><title>MagnetLab — Cavidades para ímãs</title></head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <a href="./" class="brand" aria-label="MagnetLab"><img class="brand-symbol" src="./magnetlab-symbol.svg" alt="" width="38" height="38"><span>Magnet<span class="brand-light">Lab</span></span><span class="version">BETA 0.3</span></a>
+    <div class="header-right"><span class="local"><i data-lucide="shield-check"></i> Seu STL fica neste dispositivo</span><button id="help" class="button quiet"><i data-lucide="circle-help"></i><span>Guia rápido</span></button></div>
+  </header>
+  <div class="workspace">
+    <aside class="left-panel">
+      <div class="panel-top"><span class="eyebrow">SEU PROJETO</span><h1>Um lugar para<br>cada ímã.</h1><p>Da superfície ao encaixe.<br>Sem sair do navegador.</p></div>
+      <input type="file" id="file" accept=".stl" hidden>
+      <button id="import" class="upload-card"><span class="upload-icon"><i data-lucide="upload"></i></span><strong>Importar arquivo STL</strong><small>ou arraste seu arquivo aqui</small><span class="upload-meta">ASCII ou binário · até 200 MB</span></button>
+      <label class="unit-label" for="units">Unidade do arquivo<select id="units"><option value="1">Milímetros (mm)</option><option value="25.4">Polegadas (in)</option><option value="10">Centímetros (cm)</option></select></label>
+      <section class="model-card"><div class="section-title"><span>MODELO</span><span class="live-dot"></span></div><div class="file-name"><i data-lucide="box"></i><strong id="filename">Carregando exemplo…</strong></div><div class="file-stats"><span>Triângulos</span><b id="triangles">—</b><span>Dimensões</span><b id="dimensions">—</b></div><div class="mesh-state" id="mesh-state"><i data-lucide="check-circle-2"></i> Malha fechada</div></section>
+      <section id="repair-panel" class="repair-panel" hidden>
+        <div class="section-title"><span>REPARO DA MALHA</span><i data-lucide="wrench"></i></div>
+        <p id="repair-description"></p>
+        <div id="repair-options">
+          <label for="weld-tolerance">Unir vértices até <span>(mm)</span><input id="weld-tolerance" type="number" min="0" max="0.1" step="0.001" value="0.001"></label>
+          <label for="hole-limit">Fechar buracos até <span>(mm)</span><input id="hole-limit" type="number" min="0" max="100" step="1" value="5"></label>
+          <small>Limite pela diagonal do contorno. Use 0 para não fechar buracos.</small>
+          <label class="patches-label"><input id="advanced-repair" type="checkbox" checked> Reparar conexões e contornos complexos</label>
+          <small>Se o reparo simples falhar, tenta reconstruir pequenos defeitos e destaca as áreas alteradas.</small>
+          <button id="repair" class="button repair-button"><i data-lucide="wrench"></i> Reparar malha</button>
+        </div>
+        <div id="repair-result" hidden></div>
+        <label id="patches-label" class="patches-label" hidden><input id="show-patches" type="checkbox" checked> Destacar áreas reparadas</label>
+      </section>
+      <section class="cavities-section"><div class="section-title"><span>CAVIDADES</span><span id="count" class="count">0</span></div><div id="cavities" class="cavity-list"></div><button id="add" class="button add-button"><i data-lucide="plus"></i> Adicionar cavidade <kbd>A</kbd></button></section>
+      <div class="left-bottom"><button id="demo" class="button quiet"><i data-lucide="rotate-ccw"></i> Reabrir demonstração</button><a href="./documentacao.html" target="_blank" rel="noopener" class="doc-link">Documentação do projeto <span>↗</span></a></div>
+    </aside>
+    <main id="viewport" aria-label="Visualização 3D da peça">
+      <div class="viewport-top"><span class="view-tag"><span class="live-dot"></span> <span id="view-mode">MODO DE INSPEÇÃO</span></span><span class="demo-tag" id="demo-tag">MODELO DE DEMONSTRAÇÃO</span></div>
+      <div id="canvas-host"></div>
+      <div class="viewport-tools"><button id="fit" class="tool-button" title="Enquadrar peça (F)" aria-label="Enquadrar peça"><i data-lucide="scan"></i></button><button id="top-view" class="tool-button" title="Vista superior" aria-label="Vista superior"><i data-lucide="square"></i></button><span></span><button id="wireframe" class="tool-button" title="Mostrar triângulos" aria-label="Mostrar triângulos" aria-pressed="false"><i data-lucide="network"></i></button><button id="section" class="tool-button" title="Corte visual" aria-label="Corte visual" aria-pressed="false"><i data-lucide="slice"></i></button></div>
+      <div id="section-control" class="section-control" hidden><label for="section-range">Corte visual · eixo X</label><input id="section-range" type="range" min="0" max="100" value="50"><small>Visualização aberta, sem tampa.</small></div>
+      <div class="viewport-bottom"><div class="gesture-hint"><i data-lucide="mouse"></i><span id="hint">Arraste para girar <b>·</b> Scroll para aproximar <b>·</b> Botão direito para mover</span></div><span class="axis-label"><b class="axis-x">X</b><b class="axis-y">Y</b><b class="axis-z">Z</b><span>mm</span></span></div>
+      <div id="busy" class="busy"><span class="spinner"></span><strong id="busy-label">Preparando o estúdio…</strong><small>Processamento no seu dispositivo</small></div>
+      <div id="drop-overlay" hidden><i data-lucide="upload"></i><strong>Solte seu STL aqui</strong></div>
+    </main>
+    <aside class="right-panel">
+      <div class="settings-heading"><span class="eyebrow">CONFIGURAR ENCAIXE</span><h2 id="settings-title">Seu ímã</h2><p id="settings-subtitle">Defina as medidas e escolha um ponto na peça.</p></div>
+      <div class="magnet-diagram"><div class="magnet-top"></div><div class="magnet-body"></div><span class="dim-horizontal">⌀ <b id="diagram-diameter">6</b> mm</span><span class="dim-vertical"><b id="diagram-depth">3</b> mm</span></div>
+      <label class="field-label" for="preset">Tamanho do ímã</label><select id="preset"><option value="6,3">Disco · 6 × 3 mm</option><option value="3,2">Disco · 3 × 2 mm</option><option value="5,2">Disco · 5 × 2 mm</option><option value="8,3">Disco · 8 × 3 mm</option><option value="10,3">Disco · 10 × 3 mm</option><option value="custom">Personalizado</option></select>
+      <div class="field-row"><label for="diameter">Diâmetro<div class="number-wrap"><input id="diameter" type="number" min="0.5" max="100" step="0.1" value="6"><span>mm</span></div></label><label for="thickness">Espessura<div class="number-wrap"><input id="thickness" type="number" min="0.2" max="100" step="0.1" value="3"><span>mm</span></div></label></div>
+      <div class="divider"></div>
+      <div class="section-title"><span>FOLGAS DE ENCAIXE</span><i data-lucide="sliders-horizontal"></i></div>
+      <div class="field-row"><label for="diameterAllowance">No diâmetro<div class="number-wrap"><input id="diameterAllowance" type="number" min="0" max="5" step="0.05" value="0.2"><span>mm</span></div></label><label for="depthAllowance">No fundo<div class="number-wrap"><input id="depthAllowance" type="number" min="0" max="5" step="0.05" value="0.1"><span>mm</span></div></label></div>
+      <p class="field-note">A folga no diâmetro é total. Ajuste conforme sua impressão e o tipo de encaixe.</p>
+      <div class="result-card"><span>CAVIDADE FINAL</span><strong>⌀ <b id="result-diameter">6,20</b> <em>×</em> <b id="result-depth">3,10</b> <small>mm</small></strong></div>
+      <div id="selected-actions" hidden><button id="reposition" class="button secondary"><i data-lucide="move"></i> Reposicionar na superfície</button><button id="delete" class="button danger"><i data-lucide="trash-2"></i> Excluir cavidade</button></div>
+      <div class="notice"><i data-lucide="info"></i><p>A profundidade parte do ponto clicado. Confira o fundo e as laterais no corte visual antes de imprimir.</p></div>
+      <div class="export-area"><button id="apply" class="button secondary"><i data-lucide="check"></i> Conferir cortes</button><button id="export" class="button primary"><i data-lucide="download"></i> Exportar STL</button><a id="download-again" class="download-again" hidden>Baixar arquivo pronto ↗</a><span id="export-note">Geometria real · medidas em milímetros</span></div>
+    </aside>
+  </div>
+  <footer class="statusbar"><span><span class="live-dot"></span><span id="status" role="status" aria-live="polite">Iniciando…</span></span><div><button id="undo" aria-label="Desfazer" title="Desfazer (Ctrl/Cmd Z)"><i data-lucide="undo-2"></i></button><button id="redo" aria-label="Refazer" title="Refazer (Ctrl/Cmd Shift Z)"><i data-lucide="redo-2"></i></button><span class="status-divider"></span><span>1 unidade = 1 mm</span></div></footer>
+</div>
+<div id="toast" role="alert" hidden></div>
+<dialog id="help-dialog"><form method="dialog"><button class="dialog-close" aria-label="Fechar">×</button><span class="eyebrow">GUIA RÁPIDO</span><h2>Seu primeiro encaixe.</h2><ol><li><b>Importe a peça.</b> Confira a unidade e as dimensões.</li><li><b>Configure o ímã.</b> Escolha diâmetro, espessura e folgas.</li><li><b>Adicione uma cavidade.</b> Clique em uma superfície. Esc encerra o modo de posicionamento.</li><li><b>Confira os cortes.</b> Inspecione o resultado e use o corte visual para ver o interior.</li><li><b>Exporte o STL.</b> Abra o resultado no seu fatiador e confira antes de imprimir.</li></ol><p>Se o STL tiver defeitos, ele abre para inspeção. Use “Reparar malha” no painel esquerdo; os contornos fechados aparecem em laranja. O original é preservado. Nem todo defeito pode ser reparado automaticamente. Esta versão usa a normal do triângulo e não verifica automaticamente toda a espessura das paredes. O original não é sobrescrito. Projetos ainda não são salvos entre sessões.</p><button class="button primary">Vamos começar</button></form></dialog>
+<script type="module" src="/src/main.js"></script>
+</body></html>

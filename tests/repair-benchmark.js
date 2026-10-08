@@ -1,0 +1,12 @@
+import Module from 'manifold-3d';
+import {writeFileSync} from 'node:fs';
+import {fromManifold,toManifold} from '../src/geometry.js';
+import {repairMesh} from '../src/repair.js';
+const m=await Module();m.setup();
+const sphere=m.Manifold.sphere(40,1024),data=fromManifold(sphere),expectedVolume=sphere.volume();sphere.delete();
+data.indices=data.indices.slice(3);[data.indices[1],data.indices[2]]=[data.indices[2],data.indices[1]];
+const start=performance.now(),repaired=repairMesh(data),repairedMs=performance.now()-start;
+const solid=toManifold(m,repaired),volumeError=Math.abs(solid.volume()-expectedVolume);solid.delete();
+if(volumeError>.01)throw new Error(`Unexpected volume change: ${volumeError}`);
+const report={date:'2026-10-07',node:process.version,platform:process.platform,architecture:process.arch,inputTriangles:data.indices.length/3,outputTriangles:repaired.indices.length/3,repairedMs,volumeError,peakProcessRSSMiB:process.resourceUsage().maxRSS/1024,repairs:repaired.repairReport,note:'Synthetic sphere: one missing triangle and one reversed face. Node.js results, not a browser performance guarantee.'};
+console.log(JSON.stringify(report,null,2));writeFileSync('tests/repair-benchmark-result.json',JSON.stringify(report,null,2)+'\n');

@@ -1,0 +1,17 @@
+{
+  "date": "2026-10-07",
+  "runtime": "v24.15.0",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "inputTriangles": 524288,
+  "inputMB": 26.214484,
+  "outputTriangles": 523822,
+  "parseMs": 465.481,
+  "validateMs": 353.66270800000007,
+  "bvhMs": 164.9525410000001,
+  "cutMs": 360.43112500000007,
+  "exportMs": 263.74133300000017,
+  "roundtripStatus": "NoError",
+  "removedVolume": 91.62400165060535,
+  "note": "Synthetic closed sphere; timings in Node.js on this host, not a browser SLA or arbitrary-STL guarantee."
+}
