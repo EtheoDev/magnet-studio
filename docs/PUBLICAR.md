@@ -2,6 +2,10 @@
 
 Verificado em 8 de outubro de 2026.
 
+## Publicar pelo GitHub
+
+Para o repositório EtheoDev/magnet-studio, veja [o guia de GitHub Pages](GITHUB-PAGES.md). O fluxo recomendado é GitHub Actions, que compila o site a cada atualização na main. O guia também explica como publicar os arquivos compilados por uma branch.
+
 ## Caminho mais simples: Cloudflare Pages
 
 A aplicação é estática: os cálculos de STL e WebAssembly rodam no navegador do visitante. Não precisa de servidor de processamento nem banco de dados. O Cloudflare Pages oferece plano gratuito, sujeito aos limites do serviço. Um endereço `pages.dev` evita a compra de domínio.
