@@ -54,8 +54,4 @@ A aprovação topológica não é uma auditoria completa de auto-interseções o
 - `docs/`: documentação técnica e plano de evolução.
 - `.openai/hosting.json`: configuração do site privado.
 
-Dependências fixadas no arquivo de lock. Bibliotecas e WASM são servidos pelo próprio site. As fontes de interface atualmente usam Google Fonts e têm fallback local; o conteúdo dos STLs não é transmitido a esse serviço.
 
-## Publicar gratuitamente
-
-Veja [o passo a passo para Cloudflare Pages](docs/PUBLICAR.md). O pacote de publicação é o conteúdo de `dist`, sem arquivos STL do usuário.
