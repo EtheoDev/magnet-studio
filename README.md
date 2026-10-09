@@ -1,6 +1,6 @@
 # MagnetLab
 
-Editor web de cavidades cilíndricas para ímãs em arquivos STL. Versão 0.3: 8 de outubro de 2026.
+Editor web de cavidades cilíndricas para ímãs em STL e projetos LYS. Versão 0.4.3 experimental: 9 de outubro de 2026.
 
 ## Executar localmente
 
@@ -37,7 +37,7 @@ Malhas legíveis com defeitos abrem para inspeção. O painel “Reparar malha�
 - Subtração de sólidos com Manifold em Web Worker e exportação STL binária.
 - Validação topológica inicial, mensagens de erro e guia de uso.
 
-## Limitações da versão 0.3
+## Limitações da versão 0.4.3
 
 A aprovação topológica não é uma auditoria completa de auto-interseções ou de fabricação. A ferramenta não verifica automaticamente se uma cavidade rompe a lateral ou o fundo da peça. O corte visual não adiciona tampa à seção. A orientação segue o triângulo clicado, sem suavização regional ou inclinação manual. Não há persistência de projeto: recarregar ou importar outra peça descarta as cavidades. Modelos grandes e complexos podem exceder os recursos do dispositivo; 3 milhões de triângulos e 200 MB são limites de admissão, não uma garantia de desempenho.
 
@@ -59,3 +59,11 @@ A aprovação topológica não é uma auditoria completa de auto-interseções o
 ## GitHub Pages
 
 Veja [o guia para GitHub Actions e publicação por branch](docs/GITHUB-PAGES.md). O site precisa ser compilado antes da publicação.
+
+## LYS experimental
+
+Consulte [LYS.md](docs/LYS.md). A prévia e a exportação STL contêm somente a peça. A saída LYS preserva base, posicionamento e estrutura dos suportes, e prolonga pontas cônicas compatíveis que perderam contato com o corte. Escavação, drenagens e cortes ficam incorporados à malha. A abertura da versão 0.4.1 foi confirmada pelo usuário no Lychee; a nova reconexão de pontas foi validada geometricamente e ainda requer conferência visual e fatiamento no Lychee.
+
+Suporta uma peça sem escala, contêiner 3.1.0, malhas versão 2 e furos cilíndricos. Não reconstrói suportes na prévia nem no STL. O reforço interno é opcional em peças ocas LYS e substitui drenagens interferentes por um furo central proporcional ao encaixe.
+
+Na versão 0.4.3, contatos de suporte que não puderam ser reconectados deixam de bloquear o download LYS: são mantidos na posição original e identificados em um aviso persistente para revisão no Lychee.

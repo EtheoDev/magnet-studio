@@ -96,9 +96,12 @@ export function tangentBasis(n) {
 export function createCutter(module, cavity) {
   validateCavity(cavity);
   const { diameter, depth } = cavityDimensions(cavity);
+  return axialCylinder(module,cavity,diameter,depth,Math.max(0.5,diameter/2));
+}
+
+// Also used for drainage smaller than the minimum magnet size.
+export function axialCylinder(module,cavity,diameter,depth,outward=0.02) {
   const n = cavity.normal, { u, v } = tangentBasis(n);
-  // Extension limited to the local neighborhood; avoids cutting remote shells.
-  const outward = Math.max(0.5, diameter / 2);
   const origin = cavity.point.map((x, k) => x - n[k] * depth);
   const radius = diameter / 2;
   const segments = Math.max(64, Math.min(512, Math.ceil(Math.PI / Math.acos(Math.max(-1, 1 - 0.005 / radius)))));
@@ -106,6 +109,15 @@ export function createCutter(module, cavity) {
   try {
     return primitive.transform([u[0], u[1], u[2], 0, v[0], v[1], v[2], 0, n[0], n[1], n[2], 0, ...origin, 1]);
   } finally { primitive.delete(); }
+}
+
+export function createReinforcement(module,c,envelope) {
+  validateCavity(c);
+  if(!envelope)throw new Error('Reforço interno disponível para peças ocas importadas de LYS.');
+  if(![c.wall,c.bottom].every(v=>Number.isFinite(v)&&v>=0.5&&v<=10))throw new Error('Use parede e fundo do reforço entre 0,5 e 10 mm.');
+  const {diameter,depth}=cavityDimensions(c);
+  const tool=axialCylinder(module,c,diameter+2*c.wall,depth+c.bottom);
+  try{return tool.intersect(envelope);}finally{tool.delete();}
 }
 
 export function cutCavities(module, base, cavities) {
@@ -125,6 +137,26 @@ export function cutCavities(module, base, cavities) {
     }
     return current;
   } catch (err) { if (current !== base) current.delete(); throw err; }
+}
+
+export function cutWithReinforcement(module, base, cavities, envelope) {
+  if(cavities.length>LIMITS.cavities)throw new Error('O limite desta versão é 100 cavidades.');
+  let reinforced=base;
+  try {
+    for(const c of cavities) {
+      validateCavity(c);
+      if(!c.reinforce)continue;
+      const boss=createReinforcement(module,c,envelope);
+      try {
+        const next=reinforced.add(boss);
+        if(reinforced!==base)reinforced.delete();reinforced=next;
+      }finally{boss.delete();}
+    }
+    // Add every boss first so later reinforcements cannot fill earlier pockets.
+    const result=cutCavities(module,reinforced,cavities);
+    if(result!==reinforced&&reinforced!==base)reinforced.delete();
+    return result;
+  }catch(error){if(reinforced!==base)reinforced.delete();throw error;}
 }
 
 export function binarySTL(data, offset = [0, 0, 0]) {
