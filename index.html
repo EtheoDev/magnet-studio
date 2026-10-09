@@ -4,16 +4,22 @@
 <body>
 <div id="app">
   <header class="topbar">
-    <a href="./" class="brand" aria-label="MagnetLab"><img class="brand-symbol" src="./magnetlab-symbol.svg" alt="" width="38" height="38"><span>Magnet<span class="brand-light">Lab</span></span><span class="version">BETA 0.3</span></a>
-    <div class="header-right"><span class="local"><i data-lucide="shield-check"></i> Seu STL fica neste dispositivo</span><button id="help" class="button quiet"><i data-lucide="circle-help"></i><span>Guia rápido</span></button></div>
+    <a href="./" class="brand" aria-label="MagnetLab"><img class="brand-symbol" src="./magnetlab-symbol.svg" alt="" width="38" height="38"><span>Magnet<span class="brand-light">Lab</span></span><span class="version">BETA 0.4.3</span></a>
+    <div class="header-right"><span class="local"><i data-lucide="shield-check"></i> Seu arquivo fica neste dispositivo</span><button id="help" class="button quiet"><i data-lucide="circle-help"></i><span>Guia rápido</span></button></div>
   </header>
   <div class="workspace">
     <aside class="left-panel">
       <div class="panel-top"><span class="eyebrow">SEU PROJETO</span><h1>Um lugar para<br>cada ímã.</h1><p>Da superfície ao encaixe.<br>Sem sair do navegador.</p></div>
-      <input type="file" id="file" accept=".stl" hidden>
-      <button id="import" class="upload-card"><span class="upload-icon"><i data-lucide="upload"></i></span><strong>Importar arquivo STL</strong><small>ou arraste seu arquivo aqui</small><span class="upload-meta">ASCII ou binário · até 200 MB</span></button>
-      <label class="unit-label" for="units">Unidade do arquivo<select id="units"><option value="1">Milímetros (mm)</option><option value="25.4">Polegadas (in)</option><option value="10">Centímetros (cm)</option></select></label>
+      <input type="file" id="file" accept=".stl,.lys" hidden>
+      <button id="import" class="upload-card"><span class="upload-icon"><i data-lucide="upload"></i></span><strong>Importar STL ou LYS</strong><small>ou arraste seu arquivo aqui</small><span class="upload-meta">STL ou projeto Lychee · até 200 MB</span></button>
+      <label class="unit-label" for="units">Unidade do STL<select id="units"><option value="1">Milímetros (mm)</option><option value="25.4">Polegadas (in)</option><option value="10">Centímetros (cm)</option></select></label>
       <section class="model-card"><div class="section-title"><span>MODELO</span><span class="live-dot"></span></div><div class="file-name"><i data-lucide="box"></i><strong id="filename">Carregando exemplo…</strong></div><div class="file-stats"><span>Triângulos</span><b id="triangles">—</b><span>Dimensões</span><b id="dimensions">—</b></div><div class="mesh-state" id="mesh-state"><i data-lucide="check-circle-2"></i> Malha fechada</div></section>
+      <section id="lys-panel" class="lys-panel" hidden>
+        <div class="section-title"><span>PROJETO LYCHEE · EXPERIMENTAL</span></div>
+        <p id="lys-summary"></p><p id="drain-result" hidden role="status"></p>
+        <p>A prévia mostra só a peça. Na saída LYS, pontas compatíveis afetadas pelo corte são estendidas até o novo fundo. A base e as junções das hastes são preservadas; confira os contatos no Lychee.</p>
+        <p>Escavação e drenagens ficam incorporadas à malha exportada. O STL contém apenas a peça, na orientação desta prévia.</p>
+      </section>
       <section id="repair-panel" class="repair-panel" hidden>
         <div class="section-title"><span>REPARO DA MALHA</span><i data-lucide="wrench"></i></div>
         <p id="repair-description"></p>
@@ -38,7 +44,7 @@
       <div id="section-control" class="section-control" hidden><label for="section-range">Corte visual · eixo X</label><input id="section-range" type="range" min="0" max="100" value="50"><small>Visualização aberta, sem tampa.</small></div>
       <div class="viewport-bottom"><div class="gesture-hint"><i data-lucide="mouse"></i><span id="hint">Arraste para girar <b>·</b> Scroll para aproximar <b>·</b> Botão direito para mover</span></div><span class="axis-label"><b class="axis-x">X</b><b class="axis-y">Y</b><b class="axis-z">Z</b><span>mm</span></span></div>
       <div id="busy" class="busy"><span class="spinner"></span><strong id="busy-label">Preparando o estúdio…</strong><small>Processamento no seu dispositivo</small></div>
-      <div id="drop-overlay" hidden><i data-lucide="upload"></i><strong>Solte seu STL aqui</strong></div>
+      <div id="drop-overlay" hidden><i data-lucide="upload"></i><strong>Solte seu STL ou LYS aqui</strong></div>
     </main>
     <aside class="right-panel">
       <div class="settings-heading"><span class="eyebrow">CONFIGURAR ENCAIXE</span><h2 id="settings-title">Seu ímã</h2><p id="settings-subtitle">Defina as medidas e escolha um ponto na peça.</p></div>
@@ -49,15 +55,20 @@
       <div class="section-title"><span>FOLGAS DE ENCAIXE</span><i data-lucide="sliders-horizontal"></i></div>
       <div class="field-row"><label for="diameterAllowance">No diâmetro<div class="number-wrap"><input id="diameterAllowance" type="number" min="0" max="5" step="0.05" value="0.2"><span>mm</span></div></label><label for="depthAllowance">No fundo<div class="number-wrap"><input id="depthAllowance" type="number" min="0" max="5" step="0.05" value="0.1"><span>mm</span></div></label></div>
       <p class="field-note">A folga no diâmetro é total. Ajuste conforme sua impressão e o tipo de encaixe.</p>
+      <div id="reinforcement" class="reinforcement" hidden>
+        <label><input id="reinforce" type="checkbox" checked> Criar reforço interno</label>
+        <div class="field-row"><label for="wall">Parede do reforço<div class="number-wrap"><input id="wall" type="number" min="0.5" max="10" step="0.1" value="1.5"><span>mm</span></div></label><label for="bottom">Fundo do reforço<div class="number-wrap"><input id="bottom" type="number" min="0.5" max="10" step="0.1" value="1.5"><span>mm</span></div></label></div>
+        <p class="field-note">Ao conferir os cortes, drenagens que interferem no encaixe são fechadas. Cada cavidade recebe uma drenagem central com raio de 30% do raio final do encaixe, até o vazio interno. Confira o resultado no corte visual.</p>
+      </div>
       <div class="result-card"><span>CAVIDADE FINAL</span><strong>⌀ <b id="result-diameter">6,20</b> <em>×</em> <b id="result-depth">3,10</b> <small>mm</small></strong></div>
       <div id="selected-actions" hidden><button id="reposition" class="button secondary"><i data-lucide="move"></i> Reposicionar na superfície</button><button id="delete" class="button danger"><i data-lucide="trash-2"></i> Excluir cavidade</button></div>
       <div class="notice"><i data-lucide="info"></i><p>A profundidade parte do ponto clicado. Confira o fundo e as laterais no corte visual antes de imprimir.</p></div>
-      <div class="export-area"><button id="apply" class="button secondary"><i data-lucide="check"></i> Conferir cortes</button><button id="export" class="button primary"><i data-lucide="download"></i> Exportar STL</button><a id="download-again" class="download-again" hidden>Baixar arquivo pronto ↗</a><span id="export-note">Geometria real · medidas em milímetros</span></div>
+      <div class="export-area"><button id="apply" class="button secondary"><i data-lucide="check"></i> Conferir cortes</button><button id="export" class="button primary"><i data-lucide="download"></i> Exportar STL</button><button id="export-lys" class="button primary" hidden><i data-lucide="download"></i> Exportar LYS com suportes</button><a id="download-again" class="download-again" hidden>Baixar arquivo pronto ↗</a><p id="support-result" class="support-result" role="status" hidden></p><span id="export-note">Geometria real · medidas em milímetros</span></div>
     </aside>
   </div>
   <footer class="statusbar"><span><span class="live-dot"></span><span id="status" role="status" aria-live="polite">Iniciando…</span></span><div><button id="undo" aria-label="Desfazer" title="Desfazer (Ctrl/Cmd Z)"><i data-lucide="undo-2"></i></button><button id="redo" aria-label="Refazer" title="Refazer (Ctrl/Cmd Shift Z)"><i data-lucide="redo-2"></i></button><span class="status-divider"></span><span>1 unidade = 1 mm</span></div></footer>
 </div>
 <div id="toast" role="alert" hidden></div>
-<dialog id="help-dialog"><form method="dialog"><button class="dialog-close" aria-label="Fechar">×</button><span class="eyebrow">GUIA RÁPIDO</span><h2>Seu primeiro encaixe.</h2><ol><li><b>Importe a peça.</b> Confira a unidade e as dimensões.</li><li><b>Configure o ímã.</b> Escolha diâmetro, espessura e folgas.</li><li><b>Adicione uma cavidade.</b> Clique em uma superfície. Esc encerra o modo de posicionamento.</li><li><b>Confira os cortes.</b> Inspecione o resultado e use o corte visual para ver o interior.</li><li><b>Exporte o STL.</b> Abra o resultado no seu fatiador e confira antes de imprimir.</li></ol><p>Se o STL tiver defeitos, ele abre para inspeção. Use “Reparar malha” no painel esquerdo; os contornos fechados aparecem em laranja. O original é preservado. Nem todo defeito pode ser reparado automaticamente. Esta versão usa a normal do triângulo e não verifica automaticamente toda a espessura das paredes. O original não é sobrescrito. Projetos ainda não são salvos entre sessões.</p><button class="button primary">Vamos começar</button></form></dialog>
+<dialog id="help-dialog"><form method="dialog"><button class="dialog-close" aria-label="Fechar">×</button><span class="eyebrow">GUIA RÁPIDO</span><h2>Seu primeiro encaixe.</h2><ol><li><b>Importe a peça.</b> Confira a unidade e as dimensões.</li><li><b>Configure o ímã.</b> Escolha diâmetro, espessura e folgas.</li><li><b>Adicione uma cavidade.</b> Clique em uma superfície. Esc encerra o modo de posicionamento.</li><li><b>Confira os cortes.</b> Inspecione o resultado e use o corte visual para ver o interior.</li><li><b>Exporte o STL.</b> Abra o resultado no seu fatiador e confira antes de imprimir.</li></ol><p>Se o STL tiver defeitos, ele abre para inspeção. Use “Reparar malha” no painel esquerdo; os contornos fechados aparecem em laranja. O original é preservado. Nem todo defeito pode ser reparado automaticamente. Esta versão usa a normal do triângulo e não verifica automaticamente toda a espessura das paredes. O original não é sobrescrito. LYS experimental: uma peça sem escala, com malha interna e furos cilíndricos. A prévia e o STL mostram apenas a peça; o LYS preserva os parâmetros originais de suportes e base, com escavação e furos incorporados à malha. Reabra o LYS para conferir os apoios após o corte. Projetos ainda não são salvos entre sessões.</p><button class="button primary">Vamos começar</button></form></dialog>
 <script type="module" src="/src/main.js"></script>
 </body></html>
