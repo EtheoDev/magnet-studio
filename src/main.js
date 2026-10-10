@@ -20,22 +20,21 @@ function initializeWorker() {
   worker = new Worker(new URL('./geometry.worker.js',import.meta.url),{type:'module'});
   worker.onmessage = ({data}) => {
     const pending=requests.get(data.id); if(!pending) return;
-    clearTimeout(pending.timer); requests.delete(data.id);
+    requests.delete(data.id);
     if(data.ok) pending.resolve(data.payload); else pending.reject(Object.assign(new Error(data.error),{repairReport:data.repairReport}));
   };
   worker.onerror = () => failWorker('O processamento 3D foi interrompido. Recarregue a página e importe novamente.');
 }
 function failWorker(message) {
   state.alive=false; worker.terminate();
-  for(const p of requests.values()){clearTimeout(p.timer);p.reject(new Error(message));} requests.clear();
+  for(const p of requests.values()){p.reject(new Error(message));} requests.clear();
   toast(message,true); syncButtons();
 }
 function request(type,payload={},transfer=[]) {
   if(!state.alive) return Promise.reject(new Error('Recarregue a página para reiniciar o processamento 3D.'));
   const id=++requestID;
   return new Promise((resolve,reject)=>{
-    const timer=setTimeout(()=>failWorker('A operação excedeu 120 segundos. Recarregue a página e tente uma peça menor.'),120000);
-    requests.set(id,{resolve,reject,timer}); worker.postMessage({id,type,payload},transfer);
+    requests.set(id,{resolve,reject}); worker.postMessage({id,type,payload},transfer);
   });
 }
 async function busy(label,fn) {
@@ -204,7 +203,7 @@ function acceptModel(data,name,fitView=true){
 }
 async function loadModel(type,file){
   if(file&&!/\.(stl|lys)$/i.test(file.name)){toast('Escolha um arquivo com extensão .stl ou .lys.',true);return;}
-  if(file&&file.size>LIMITS.bytes){toast('Nesta versão, o limite por arquivo é 200 MB.',true);return;}
+  if(file&&/\.lys$/i.test(file.name)&&file.size>LIMITS.bytes){toast('O limite por arquivo LYS é 200 MB.',true);return;}
   if(file&&/\.lys$/i.test(file.name))type='importLys';
   await busy(type==='demo'?'Preparando a demonstração…':'Lendo e validando o modelo…',async()=>{
     let payload={},transfer=[];
@@ -215,7 +214,7 @@ async function loadModel(type,file){
     else{setStatus('Modelo aberto para inspeção · use “Reparar malha” para liberar os encaixes.');toast('O STL abriu para inspeção. Há defeitos: use “Reparar malha” no painel esquerdo.');}
   });
 }
-$('repair').onclick=()=>busy('Reparando a malha…',async()=>{
+$('repair').onclick=()=>busy('Reparando a malha… Peças grandes podem levar vários minutos.',async()=>{
   const options=validateRepairOptions({weldTolerance:Number($('weld-tolerance').value),maxHoleSize:Number($('hole-limit').value),advancedRepair:$('advanced-repair').checked});
   const data=await request('repair',{options});acceptModel(data,state.name,false);
   setStatus(`Malha reparada em ${fmt(data.elapsed/1000,2)} s · confira as correções e adicione seus ímãs.`);

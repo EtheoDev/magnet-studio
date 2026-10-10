@@ -1,0 +1,36 @@
+{
+  "node": "v24.15.0",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "inputTriangles": 3276799,
+  "outputTriangles": 3276800,
+  "repairMs": 16704.548833,
+  "volumeError": 0.000002633489202708006,
+  "peakProcessRSSMiB": 2738.765625,
+  "repairs": {
+    "verticesWelded": 0,
+    "maxVertexDisplacement": 0,
+    "degenerateRemoved": 0,
+    "duplicatesRemoved": 0,
+    "facesReoriented": 1,
+    "shellsReoriented": 1,
+    "components": 1,
+    "holesDetected": 1,
+    "holesFilled": 1,
+    "holesSkipped": 0,
+    "facesAdded": 1,
+    "ambiguousBoundaryEdges": 0,
+    "skippedReasons": {
+      "acimaDoLimite": 0,
+      "naoPlanos": 0,
+      "complexos": 0
+    },
+    "options": {
+      "weldTolerance": 0.001,
+      "maxHoleSize": 5,
+      "advancedRepair": false
+    },
+    "method": "conservative"
+  },
+  "note": "Synthetic sphere with one missing triangle and one reversed face; includes STL import above the former 3-million limit. Local Node measurement, not a browser performance guarantee."
+}

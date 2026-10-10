@@ -165,7 +165,7 @@ Manifold valida se a malha atende à estrutura topológica exigida e calcula as 
 
 As mensagens usam identificador de requisição e resposta `ok`/`error`. O buffer de entrada e o de exportação usam transferência de propriedade. As respostas de geometria usam cópia estruturada nesta versão; transferir todos os buffers é uma otimização futura.
 
-Operações têm timeout de 120 segundos. Se o worker falhar ou exceder o tempo, ele é encerrado e a interface informa a necessidade de recarregar e reimportar. Ainda não existe recuperação automática do worker nem cancelamento independente por operação.
+Desde a versão 0.4.4, operações não são interrompidas por prazo fixo. Se o worker falhar, ele é encerrado e a interface informa a necessidade de recarregar e reimportar. Ainda não existe recuperação automática do worker nem cancelamento independente por operação.
 
 ### Modelo de cavidade
 
@@ -199,7 +199,7 @@ Estratégia implementada:
 - limitar histórico a 50 alterações paramétricas;
 - limitar pixel ratio de renderização a 2.
 
-Limites de admissão atuais: 200 MB, 3 milhões de triângulos e 100 cavidades. São proteções contra cargas excessivas, não uma promessa de que todos os modelos nesses limites funcionarão. STL ASCII é verificado por contagem após a leitura; um arquivo textual muito grande ainda pode pressionar a memória antes da rejeição por triângulos.
+Desde a versão 0.4.4, o fluxo STL não possui teto fixo de bytes, triângulos ou tempo. A capacidade prática depende da memória disponível e dos limites do navegador/WASM. O limite de 100 cavidades permanece, assim como os limites de 200 MB e 3 milhões de triângulos do formato LYS experimental.
 
 O benchmark reproduzível usa uma esfera sintética fechada com mais de 300 mil triângulos. Os tempos medidos devem ser identificados pelo ambiente. Resultados em Node.js não são uma garantia de desempenho do navegador ou de modelos orgânicos defeituosos.
 

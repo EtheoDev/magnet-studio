@@ -4,14 +4,14 @@
 <body>
 <div id="app">
   <header class="topbar">
-    <a href="./" class="brand" aria-label="MagnetLab"><img class="brand-symbol" src="./magnetlab-symbol.svg" alt="" width="38" height="38"><span>Magnet<span class="brand-light">Lab</span></span><span class="version">BETA 0.4.3</span></a>
+    <a href="./" class="brand" aria-label="MagnetLab"><img class="brand-symbol" src="./magnetlab-symbol.svg" alt="" width="38" height="38"><span>Magnet<span class="brand-light">Lab</span></span><span class="version">BETA 0.4.4</span></a>
     <div class="header-right"><span class="local"><i data-lucide="shield-check"></i> Seu arquivo fica neste dispositivo</span><button id="help" class="button quiet"><i data-lucide="circle-help"></i><span>Guia rápido</span></button></div>
   </header>
   <div class="workspace">
     <aside class="left-panel">
       <div class="panel-top"><span class="eyebrow">SEU PROJETO</span><h1>Um lugar para<br>cada ímã.</h1><p>Da superfície ao encaixe.<br>Sem sair do navegador.</p></div>
       <input type="file" id="file" accept=".stl,.lys" hidden>
-      <button id="import" class="upload-card"><span class="upload-icon"><i data-lucide="upload"></i></span><strong>Importar STL ou LYS</strong><small>ou arraste seu arquivo aqui</small><span class="upload-meta">STL ou projeto Lychee · até 200 MB</span></button>
+      <button id="import" class="upload-card"><span class="upload-icon"><i data-lucide="upload"></i></span><strong>Importar STL ou LYS</strong><small>ou arraste seu arquivo aqui</small><span class="upload-meta">STL sem teto fixo · LYS até 200 MB</span></button>
       <label class="unit-label" for="units">Unidade do STL<select id="units"><option value="1">Milímetros (mm)</option><option value="25.4">Polegadas (in)</option><option value="10">Centímetros (cm)</option></select></label>
       <section class="model-card"><div class="section-title"><span>MODELO</span><span class="live-dot"></span></div><div class="file-name"><i data-lucide="box"></i><strong id="filename">Carregando exemplo…</strong></div><div class="file-stats"><span>Triângulos</span><b id="triangles">—</b><span>Dimensões</span><b id="dimensions">—</b></div><div class="mesh-state" id="mesh-state"><i data-lucide="check-circle-2"></i> Malha fechada</div></section>
       <section id="lys-panel" class="lys-panel" hidden>
