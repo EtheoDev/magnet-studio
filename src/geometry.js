@@ -1,6 +1,7 @@
 import { BufferGeometry, BufferAttribute, Float32BufferAttribute } from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 
+// Limits below apply to experimental LYS containers and cavity count, not STL repair.
 export const LIMITS = { bytes: 200 * 1024 * 1024, triangles: 3_000_000, cavities: 100 };
 
 export function validateCavity(c) {
@@ -22,7 +23,7 @@ export function cavityDimensions(c) {
 export function indexPositions(array, unitScale = 1) {
   if (!Number.isFinite(unitScale) || unitScale <= 0) throw new Error('Escala inválida.');
   if (array.length === 0 || array.length % 9 !== 0) throw new Error('O STL não contém triângulos válidos.');
-  const vertices = [], indices = [], lookup = new Map();
+  const vertices = [], indices = new Uint32Array(array.length / 3), lookup = new Map();
   const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
   for (let i = 0; i < array.length; i += 3) {
     const p = [array[i] * unitScale, array[i + 1] * unitScale, array[i + 2] * unitScale];
@@ -33,24 +34,21 @@ export function indexPositions(array, unitScale = 1) {
       index = vertices.length / 3; lookup.set(key, index); vertices.push(...p);
       for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], p[k]); max[k] = Math.max(max[k], p[k]); }
     }
-    indices.push(index);
+    indices[i / 3] = index;
   }
   const offset = min.map((v, k) => (v + max[k]) / 2);
   const size = min.map((v, k) => max[k] - v);
   if (size.some(v => v <= 0)) throw new Error('O STL precisa representar um sólido com volume.');
   for (let i = 0; i < vertices.length; i++) vertices[i] -= offset[i % 3];
-  return { positions: new Float32Array(vertices), indices: new Uint32Array(indices), offset, size };
+  return { positions: new Float32Array(vertices), indices, offset, size };
 }
 
 export function parseSTL(buffer, scale = 1) {
   if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < 15) throw new Error('Arquivo STL vazio ou incompleto.');
-  if (buffer.byteLength > LIMITS.bytes) throw new Error('Nesta versão, o limite por arquivo é 200 MB.');
   if (buffer.byteLength >= 84) {
     const n = new DataView(buffer).getUint32(80, true);
     const expected = 84 + n * 50;
-    if (expected === buffer.byteLength) {
-      if (n > LIMITS.triangles) throw new Error('O limite desta versão é 3 milhões de triângulos.');
-    } else {
+    if (expected !== buffer.byteLength) {
       const header = new TextDecoder().decode(buffer.slice(0, 256)).trimStart();
       if (!header.startsWith('solid')) throw new Error('O STL binário está incompleto ou tem uma contagem de triângulos incompatível.');
     }
@@ -59,7 +57,7 @@ export function parseSTL(buffer, scale = 1) {
   try {
     geometry = new STLLoader().parse(buffer);
     const p = geometry.getAttribute('position');
-    if (!p || p.count / 3 > LIMITS.triangles) throw new Error('Arquivo vazio ou acima de 3 milhões de triângulos.');
+    if (!p || !p.count) throw new Error('O STL não contém triângulos válidos.');
     return indexPositions(p.array, scale);
   } finally { geometry?.dispose(); }
 }

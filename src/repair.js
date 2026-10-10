@@ -17,14 +17,14 @@ export function validateRepairOptions(options={}) {
   return o;
 }
 function clean(p,indices,report){
-  const out=[],seen=new Set();
+  const out=new Uint32Array(indices.length),seen=new Set();let count=0;
   for(let f=0;f<indices.length;f+=3){
     const ids=[indices[f],indices[f+1],indices[f+2]],a=point(p,ids[0]),b=point(p,ids[1]),c=point(p,ids[2]);
     if(new Set(ids).size<3||length(cross(sub(b,a),sub(c,a)))===0){report.degenerateRemoved++;continue;}
     const sorted=[...ids].sort((a,b)=>a-b),hash=sorted.join(',');
-    if(seen.has(hash)){report.duplicatesRemoved++;continue;}seen.add(hash);out.push(...ids);
+    if(seen.has(hash)){report.duplicatesRemoved++;continue;}seen.add(hash);out.set(ids,count);count+=3;
   }
-  return new Uint32Array(out);
+  return out.subarray(0,count);
 }
 // Twin edge slots support adjacency without allocating arrays per edge.
 function topology(indices,n){
@@ -59,9 +59,9 @@ function orient(indices,top){
   const count=indices.length/3,flip=new Int8Array(count).fill(-1),component=new Int32Array(count),components=[];
   for(let seed=0;seed<count;seed++){
     if(flip[seed]!==-1)continue;
-    const queue=[seed],faces=[];flip[seed]=0;const id=components.length;
+    const queue=[seed];flip[seed]=0;const id=components.length;
     for(let head=0;head<queue.length;head++){
-      const f=queue[head];faces.push(f);component[f]=id;
+      const f=queue[head];component[f]=id;
       for(let e=0;e<3;e++){
         const slot=f*3+e,twin=top.twins[slot];if(twin<0)continue;
         const neighbor=Math.floor(twin/3),same=indices[slot]===indices[twin],expected=flip[f]^(same?1:0);
@@ -69,7 +69,7 @@ function orient(indices,top){
         else if(flip[neighbor]!==expected)throw new Error('A superfície tem orientação contraditória. Este defeito exige remalhamento.');
       }
     }
-    components.push(faces);
+    components.push(queue);
   }
   for(let f=0;f<count;f++)if(flip[f]){const i=f*3;[indices[i+1],indices[i+2]]=[indices[i+2],indices[i+1]];}
   return {component,components,flip};
@@ -133,15 +133,16 @@ function fillHoles(p,indices,top,o,report){
   const ambiguous=new Set();
   if(candidates.length>1000)throw new Error('Há mais de mil contornos a fechar. Este reparo exige uma ferramenta especializada.');
   for(let i=0;i<candidates.length;i++)for(let j=i+1;j<candidates.length;j++)if(overlappingCaps(candidates[i],candidates[j])){ambiguous.add(i);ambiguous.add(j);}
-  const output=Array.from(indices),patches=[];
+  const patches=[];
   candidates.forEach((c,idx)=>{
     if(ambiguous.has(idx)){report.holesSkipped++;report.skippedReasons.complexos++;return;}
     const triangles=ShapeUtils.triangulateShape(c.coords.map(p=>new Vector2(...p)),[]);
     if(triangles.length!==c.ids.length-2){report.holesSkipped++;report.skippedReasons.complexos++;return;}
-    for(const t of triangles){const ids=t.map(i=>c.ids[i]);const normal=cross(sub(point(p,ids[1]),point(p,ids[0])),sub(point(p,ids[2]),point(p,ids[0])));if(dot(normal,c.n)>0)[ids[1],ids[2]]=[ids[2],ids[1]];output.push(...ids);patches.push(...ids);}
+    for(const t of triangles){const ids=t.map(i=>c.ids[i]);const normal=cross(sub(point(p,ids[1]),point(p,ids[0])),sub(point(p,ids[2]),point(p,ids[0])));if(dot(normal,c.n)>0)[ids[1],ids[2]]=[ids[2],ids[1]];patches.push(...ids);}
     report.holesFilled++;report.facesAdded+=triangles.length;
   });
-  return {indices:new Uint32Array(output),patches:new Uint32Array(patches)};
+  const output=new Uint32Array(indices.length+patches.length);output.set(indices);output.set(patches,indices.length);
+  return {indices:output,patches:new Uint32Array(patches)};
 }
 // Shell orientation follows nesting parity so hollow parts keep their inner voids.
 function orientShells(p,indices,orientation,report){
@@ -173,17 +174,22 @@ function orientShells(p,indices,orientation,report){
     report.facesReoriented=flip.subarray(0,orientation.existingFaceCount??flip.length).reduce((s,f)=>s+(f===1),0);report.components=components.length;
   }finally{g?.dispose();}
 }
-function compact(p,indices){const map=new Map(),out=[],idx=new Uint32Array(indices.length);for(let k=0;k<indices.length;k++){const i=indices[k];if(!map.has(i)){map.set(i,out.length/3);out.push(...point(p,i));}idx[k]=map.get(i);}return {positions:new Float32Array(out),indices:idx};}
+function compact(p,indices){
+  const map=new Int32Array(p.length/3).fill(-1),out=new Float32Array(p.length),idx=new Uint32Array(indices.length);let count=0;
+  for(let k=0;k<indices.length;k++){const i=indices[k];if(map[i]===-1){map[i]=count;out.set(p.subarray(i*3,i*3+3),count*3);count++;}idx[k]=map[i];}
+  return {positions:out.slice(0,count*3),indices:idx};
+}
 export function diagnoseMesh(data){const t=topology(data.indices,data.positions.length/3);return {boundaryEdges:t.boundaryEdges,nonManifoldEdges:t.nonManifoldEdges};}
 export function repairMesh(data,options={}){
-  if(data.indices.length/3>1_000_000)throw new Error('O reparo desta versão aceita até 1 milhão de triângulos para limitar o uso de memória.');
   const o=validateRepairOptions(options),p=data.positions;
   const report={verticesWelded:0,maxVertexDisplacement:0,degenerateRemoved:0,duplicatesRemoved:0,facesReoriented:0,shellsReoriented:0,components:0,holesDetected:0,holesFilled:0,holesSkipped:0,facesAdded:0,ambiguousBoundaryEdges:0,skippedReasons:{acimaDoLimite:0,naoPlanos:0,complexos:0},options:o};
   let indices=clean(p,data.indices,report),t=topology(indices,p.length/3);
-  const beforeWeld=indices,beforeTopology=t,beforeReport={...report};
-  indices=clean(p,weldBoundary(p,indices,t,o.weldTolerance,report),report);t=topology(indices,p.length/3);
-  // Proximity alone is not enough: a weld must not add invalid connections.
-  if(t.nonManifoldEdges>beforeTopology.nonManifoldEdges){indices=beforeWeld;t=beforeTopology;Object.assign(report,beforeReport);report.weldRejected=true;}
+  if(o.weldTolerance>0&&t.boundaryEdges){
+    const beforeWeld=indices,beforeTopology=t,beforeReport={...report};
+    indices=clean(p,weldBoundary(p,indices,t,o.weldTolerance,report),report);t=topology(indices,p.length/3);
+    // Proximity alone is not enough: a weld must not add invalid connections.
+    if(t.nonManifoldEdges>beforeTopology.nonManifoldEdges){indices=beforeWeld;t=beforeTopology;Object.assign(report,beforeReport);report.weldRejected=true;}
+  }
   if(t.nonManifoldEdges)throw Object.assign(new Error(`${t.nonManifoldEdges} aresta(s) ainda ligam mais de duas faces. O reparo simples não resolveu essas conexões; tente o reparo avançado.`),{repairReport:report});
   const first=orient(indices,t);const initialFlips=first.flip;
   t=topology(indices,p.length/3);const filled=fillHoles(p,indices,t,o,report);indices=filled.indices;t=topology(indices,p.length/3);

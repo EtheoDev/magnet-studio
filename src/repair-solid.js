@@ -4,7 +4,6 @@ import { toManifold } from './geometry.js';
 
 export async function repairSolid(module,data,options,loadCore){
   const o=validateRepairOptions(options);
-  if(data.indices.length/3>1_000_000)throw new Error('O reparo aceita até 1 milhão de triângulos.');
   try{
     const repaired=repairMesh(data,o),solid=toManifold(module,repaired);
     repaired.repairReport.method='conservative';

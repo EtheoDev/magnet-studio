@@ -36,7 +36,7 @@ Na etapa avançada, as faces são comparadas com o original por suas coordenadas
 
 Verificamos distâncias à superfície nos três vértices e no centro de cada face alterada, em ambos os sentidos. Se alguma amostra ultrapassar **0,05 mm**, a tentativa é rejeitada. O valor mostrado é uma **medição por amostragem**, não uma prova do erro máximo contínuo nem garantia de tolerância dimensional em toda a peça.
 
-Limites: 1 milhão de triângulos para reparar, 1.000 contornos, 1.024 arestas por contorno e 50 mil faces somadas entre novas e removidas no reparo avançado. A importação de malhas já válidas continua aceitando até 3 milhões de triângulos e 200 MB. Recursos limitados do dispositivo podem reduzir a capacidade prática.
+Desde a versão 0.4.4, a importação e o reparo de STL não têm teto fixo de triângulos, tamanho de arquivo ou duração. A capacidade real depende da memória do dispositivo e dos limites de arrays/WASM no navegador. Permanecem os critérios geométricos de preservação: 1.000 contornos, 1.024 arestas por contorno e 50 mil faces somadas entre novas e removidas no reparo avançado. Os limites de 3 milhões de triângulos e 200 MB permanecem apenas no LYS experimental.
 
 O reparo não resolve qualquer STL. Auto-interseções, regiões extensas ausentes, superfícies muito ambíguas e arquivos ilegíveis ainda podem ser recusados. A aprovação geométrica não é uma auditoria completa de fabricação. A classificação de aberturas e de cascas internas usa heurísticas; confira a peça antes de imprimir.
 
@@ -75,3 +75,11 @@ node tests/repair-file.js '/caminho/arquivo.stl' '/caminho/copia-reparada.stl'
 ```
 
 O segundo comando é opcional e utiliza um arquivo local informado pelo operador. Gera a cópia reparada e um relatório JSON, testa corte, exportação, reimportação e preservação do original. O STL não é incluído no repositório. A suíte cobre também recusa de alterações excessivas, limite de buracos, desativação do reparo avançado, preservação de peças ocas e carregamento sob demanda.
+
+## Validação de malha grande — 0.4.4
+
+O STL das pernas usado na validação local contém 2.360.692 triângulos, 27 bordas abertas e 1.448 conexões com faces em excesso. O reparo avançado concluiu em aproximadamente 31,5 segundos em Node.js/macOS ARM64, gerando 2.359.692 triângulos sem bordas abertas. Foram fechados 17 contornos; o desvio máximo amostrado foi 0,000161 mm. A cópia passou pela exportação/reimportação e pela criação de uma cavidade de teste. O original não foi alterado. O modelo de terceiros não acompanha o repositório.
+
+O teste reproduzível `npm run benchmark:repair-large` usa uma esfera sintética com mais de três milhões de triângulos, uma face ausente e uma face invertida. O teste fica fora da suíte rápida por exigir memória e tempo maiores. Os tempos locais não são garantia de desempenho em qualquer navegador.
+
+Resultado sintético local: 3.276.799 triângulos importados, 3.276.800 após reparar, aproximadamente 16,7 segundos para o reparo e pico de memória do processo de 2,67 GiB (inclui geração e importação). Erro de volume inferior a 0,000003 mm³.

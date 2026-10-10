@@ -8,15 +8,17 @@ function boundarySizes(data) {
   const edges=new Map(),n=data.positions.length/3;
   for(let s=0;s<data.indices.length;s++){
     const a=data.indices[s],b=data.indices[s-s%3+(s%3+1)%3],key=Math.min(a,b)*n+Math.max(a,b);
-    const e=edges.get(key);if(e)e.count++;else edges.set(key,{a,b,count:1});
+    edges.set(key,(edges.get(key)||0)+1);
   }
   const outgoing=new Map(),incoming=new Map();
-  for(const e of edges.values()){
-    if(e.count>2)throw new Error('Ainda existem conexões inválidas após a separação das superfícies.');
-    if(e.count!==1)continue;
-    if(outgoing.has(e.a))throw new Error('O reparo encontrou um contorno ramificado.');
-    outgoing.set(e.a,e.b);incoming.set(e.b,(incoming.get(e.b)||0)+1);
+  for(let s=0;s<data.indices.length;s++){
+    const a=data.indices[s],b=data.indices[s-s%3+(s%3+1)%3],count=edges.get(Math.min(a,b)*n+Math.max(a,b));
+    if(count>2)throw new Error('Ainda existem conexões inválidas após a separação das superfícies.');
+    if(count!==1)continue;
+    if(outgoing.has(a))throw new Error('O reparo encontrou um contorno ramificado.');
+    outgoing.set(a,b);incoming.set(b,(incoming.get(b)||0)+1);
   }
+  edges.clear();
   const seen=new Set(),sizes=[];
   for(const start of outgoing.keys()){
     if(seen.has(start))continue;
@@ -74,7 +76,6 @@ function sampledDistance(source,faces,target){
 
 export function repairAdvanced(data,options,core){
   const o=validateRepairOptions(options);
-  if(data.indices.length/3>1_000_000)throw new Error('O reparo aceita até 1 milhão de triângulos.');
   const analyzer=new core.MeshAnalyzer(),path='/tmp/magnet-input.stl';
   try{
     // Centered coordinates preserve the precision used by the rest of the app.
