@@ -1,6 +1,6 @@
 # MagnetLab
 
-Editor web de cavidades cilíndricas para ímãs em STL e projetos LYS. Versão 0.4.4 experimental: 10 de outubro de 2026.
+Editor web de cavidades cilíndricas para ímãs em STL e projetos LYS. Versão 0.4.5 experimental: 13 de outubro de 2026.
 
 ## Executar localmente
 
@@ -37,7 +37,7 @@ Malhas legíveis com defeitos abrem para inspeção. O painel “Reparar malha�
 - Subtração de sólidos com Manifold em Web Worker e exportação STL binária.
 - Validação topológica inicial, mensagens de erro e guia de uso.
 
-## Limitações da versão 0.4.4
+## Limitações da versão 0.4.5
 
 A aprovação topológica não é uma auditoria completa de auto-interseções ou de fabricação. A ferramenta não verifica automaticamente se uma cavidade rompe a lateral ou o fundo da peça. O corte visual não adiciona tampa à seção. A orientação segue o triângulo clicado, sem suavização regional ou inclinação manual. Não há persistência de projeto: recarregar ou importar outra peça descarta as cavidades. A importação e o reparo de STL não têm teto fixo de triângulos, tamanho de arquivo ou tempo de processamento. A capacidade prática depende da memória disponível e dos limites do navegador/WASM. Os limites de 3 milhões de triângulos e 200 MB continuam apenas no formato LYS experimental.
 
@@ -71,3 +71,5 @@ Na versão 0.4.3, contatos de suporte que não puderam ser reconectados deixam d
 ## Reparo de STL grande (0.4.4)
 
 Removidos os tetos de um milhão de triângulos no reparo, três milhões/200 MB na importação STL e o encerramento automático de operações após 120 segundos. Arrays compactos reduzem cópias durante indexação, limpeza e fechamento. As verificações de integridade e os critérios de preservação da superfície continuam aplicados. Execute `npm run benchmark:repair-large` para validar uma malha sintética acima de três milhões de triângulos.
+
+Na versão 0.4.5, aberturas residuais minúsculas que o motor avançado não conseguiu triangular recebem uma tentativa complementar, mantendo as verificações de superfície e sólido. Consulte o guia de reparo para os critérios e a validação.
