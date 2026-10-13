@@ -1,7 +1,8 @@
 import { BufferGeometry, BufferAttribute, Vector3 } from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
 import { binarySTL } from './geometry.js';
-import { validateRepairOptions } from './repair.js';
+import { validateRepairOptions, diagnoseMesh } from './repair.js';
+import { capResidualGaps } from './repair-residual.js';
 
 // Kept separate from the WASM loader so Node and the browser use the same pipeline.
 function boundarySizes(data) {
@@ -22,14 +23,14 @@ function boundarySizes(data) {
   const seen=new Set(),sizes=[];
   for(const start of outgoing.keys()){
     if(seen.has(start))continue;
-    const min=[Infinity,Infinity,Infinity],max=[-Infinity,-Infinity,-Infinity];let id=start,count=0;
+    const min=[Infinity,Infinity,Infinity],max=[-Infinity,-Infinity,-Infinity],ids=[];let id=start,count=0;
     do{
       if(seen.has(id)||!outgoing.has(id)||incoming.get(id)!==1)throw new Error('O reparo encontrou um contorno aberto ou ambíguo.');
-      seen.add(id);count++;
+      seen.add(id);count++;ids.push(id);
       for(let k=0;k<3;k++){const v=data.positions[id*3+k];min[k]=Math.min(min[k],v);max[k]=Math.max(max[k],v);}
       id=outgoing.get(id);
     }while(id!==start);
-    sizes.push({edges:count,diagonal:Math.hypot(...max.map((v,k)=>v-min[k]))});
+    sizes.push({edges:count,ids,diagonal:Math.hypot(...max.map((v,k)=>v-min[k]))});
   }
   return sizes;
 }
@@ -90,10 +91,19 @@ export function repairAdvanced(data,options,core){
     // Preserve openings identified by the engine as intentional features.
     const filled=analyzer.fillHolesEx(1024,false),clean=analyzer.removeDegenerates(1e-10),normals=analyzer.fixNormals();
     const analysis=analyzer.getAnalysis();
-    if(!analysis.isWatertight||!analysis.isManifold||analysis.boundaryEdges||analysis.nonManifoldVertexCount||analysis.nonManifoldEdgeCount||analyzer.facesDroppedByAudit()){
-      throw new Error('O reparo avançado não conseguiu fechar a malha com segurança. Nenhuma alteração foi aplicada.');
+    if(!analysis.isManifold||analysis.nonManifoldVertexCount||analysis.nonManifoldEdgeCount||analyzer.facesDroppedByAudit()){
+      throw new Error(`O resultado ainda tem conexões inválidas (${analysis.nonManifoldEdgeCount} arestas, ${analysis.nonManifoldVertexCount} vértices) ou descarte na auditoria. Nenhuma alteração foi aplicada.`);
     }
-    const repaired=renderData(core,analyzer),changes=changedFaces(data,repaired);
+    let repaired=renderData(core,analyzer),residualHolesFilled=0;
+    if(!analysis.isWatertight||analysis.boundaryEdges){
+      if(filled.holesSkippedAsFeature)throw new Error(`Restaram ${analysis.boundaryEdges} bordas abertas, incluindo aberturas reconhecidas como intencionais. Nenhuma alteração foi aplicada.`);
+      const residual=capResidualGaps(repaired,boundarySizes(repaired),o.maxHoleSize);
+      repaired=residual;residualHolesFilled=residual.holesFilled;
+      filled.holesFilled+=residual.holesFilled;filled.facesAdded+=residual.facesAdded;
+      const check=diagnoseMesh(repaired);
+      if(check.boundaryEdges||check.nonManifoldEdges)throw new Error(`Restaram ${check.boundaryEdges} bordas abertas e ${check.nonManifoldEdges} conexões inválidas após o fechamento complementar. Nenhuma alteração foi aplicada.`);
+    }
+    const changes=changedFaces(data,repaired);
     if(changes.added.length+changes.removed.length>50000)throw new Error('O reparo exigiria alterar uma região extensa. Nenhuma alteração foi aplicada.');
     const deviation=Math.max(sampledDistance(data,changes.removed,repaired),sampledDistance(repaired,changes.added,data));
     if(deviation>0.05)throw new Error('O reparo alteraria a superfície em mais de 0,05 mm nas amostras verificadas. Nenhuma alteração foi aplicada.');
@@ -104,9 +114,9 @@ export function repairAdvanced(data,options,core){
       verticesSplit:split.verticesAdded,facesSkippedOnLoad:loaded.skippedFaces,
       duplicatesRemoved:clean.duplicateRemoved,degenerateRemoved:clean.degenerateRemoved,
       facesReoriented:normals.facesFlipped,components:analysis.connectedComponents,
-      holesFilled:filled.holesFilled,facesAdded:filled.facesAdded,
+      holesFilled:filled.holesFilled,facesAdded:filled.facesAdded,residualHolesFilled,
       changedFaces:changes.added.length,removedFaces:changes.removed.length,
-      maxSampledSurfaceDistance:deviation,boundaryEdges:analysis.boundaryEdges,
+      maxSampledSurfaceDistance:deviation,boundaryEdges:0,
     }};
   }finally{analyzer.delete();try{core.FS.unlink(path);}catch{/* The load may have failed before creating a file. */}}
 }

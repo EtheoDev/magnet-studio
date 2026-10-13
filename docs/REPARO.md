@@ -83,3 +83,13 @@ O STL das pernas usado na validação local contém 2.360.692 triângulos, 27 bo
 O teste reproduzível `npm run benchmark:repair-large` usa uma esfera sintética com mais de três milhões de triângulos, uma face ausente e uma face invertida. O teste fica fora da suíte rápida por exigir memória e tempo maiores. Os tempos locais não são garantia de desempenho em qualquer navegador.
 
 Resultado sintético local: 3.276.799 triângulos importados, 3.276.800 após reparar, aproximadamente 16,7 segundos para o reparo e pico de memória do processo de 2,67 GiB (inclui geração e importação). Erro de volume inferior a 0,000003 mm³.
+
+## Fechamento residual — 0.4.5
+
+Quando o motor avançado deixa uma abertura minúscula que não consegue triangular, uma etapa complementar adiciona um vértice central e fecha o contorno sem mover os vértices existentes. Ela atende contornos de até 0,05 mm e 32 arestas, respeita a medida de fechamento configurada e não é aplicada se o motor preservou aberturas reconhecidas como intencionais. O resultado passa pelas verificações de bordas, conexões, desvio de superfície e aceitação como sólido. Esses critérios geométricos não reintroduzem teto de triângulos ou prazo.
+
+Na calça do Leonard (1.693.847 triângulos), a tentativa anterior deixou um contorno de quatro arestas e aproximadamente 0,027 mm. A nova etapa fechou esse contorno. O reparo completo levou cerca de 22,8 segundos no teste Node local, fechou 449 contornos e gerou um sólido de 1.693.720 triângulos. O maior desvio de superfície amostrado foi aproximadamente 0,00583 mm. Exportação/reimportação e uma cavidade de teste foram validadas, com o original intacto. O modelo de terceiros não integra o repositório.
+
+Validação: 53 testes automatizados, incluindo fechamento de contorno não plano, preservação de coordenadas, respeito às medidas do usuário e recusa de fechamento de aberturas intencionais.
+
+No navegador integrado, com união de vértices em 0,01 mm e fechamento até 50 mm (os valores da imagem reportada), o reparo concluiu em 29,18 segundos. A interface exibiu “Malha reparada”, 449 contornos fechados, desvio amostrado de 0,0058 mm e liberou os controles de cavidade/exportação. Nenhum erro foi registrado no console desse teste.
