@@ -1,6 +1,6 @@
 # MagnetLab
 
-Editor web de cavidades cilíndricas para ímãs em STL e projetos LYS. Versão 0.4.5 experimental: 13 de outubro de 2026.
+Editor web de cavidades para ímãs, cortes orgânicos e encaixes em STL e projetos LYS. Versão 0.5.0 experimental: 14 de outubro de 2026.
 
 ## Executar localmente
 
@@ -73,3 +73,9 @@ Na versão 0.4.3, contatos de suporte que não puderam ser reconectados deixam d
 Removidos os tetos de um milhão de triângulos no reparo, três milhões/200 MB na importação STL e o encerramento automático de operações após 120 segundos. Arrays compactos reduzem cópias durante indexação, limpeza e fechamento. As verificações de integridade e os critérios de preservação da superfície continuam aplicados. Execute `npm run benchmark:repair-large` para validar uma malha sintética acima de três milhões de triângulos.
 
 Na versão 0.4.5, aberturas residuais minúsculas que o motor avançado não conseguiu triangular recebem uma tentativa complementar, mantendo as verificações de superfície e sólido. Consulte o guia de reparo para os critérios e a validação.
+
+## Cortes orgânicos — 0.5.0
+
+A nova aba **Cortes orgânicos** divide o modelo seguindo uma curva desenhada pela frente, lateral ou topo. Inclui pinos redondos e encaixes profundos quadrados, perfis iniciais de resina/filamento, folgas por lado e no fundo, posições individuais, prévia separada e exportação dos dois STLs. As cavidades de ímã podem ser aplicadas antes da divisão.
+
+O corte atravessa a espessura inteira na direção da vista; a curva deve avançar da esquerda para a direita. A saída é STL sem suportes LYS. Consulte [o guia de cortes e tolerâncias](docs/CORTES-ORGANICOS.md).
