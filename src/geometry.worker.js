@@ -1,3 +1,4 @@
+import { organicSplit } from './organic.js';
 import Module from 'manifold-3d';
 import wasmURL from 'manifold-3d/manifold.wasm?url';
 import { MeshBVH } from 'three-mesh-bvh';
@@ -11,6 +12,8 @@ import repairWasmURL from 'meshfix-wasm/dist/meshfix-core.wasm?url';
 let module, base, sourceData, offset=[0,0,0], result;
 let lysProject=null,envelope=null;
 function clearLys(){envelope?.delete();envelope=null;lysProject=null;}
+let splitParts=[];
+function clearSplit(){splitParts.forEach(p=>p.delete());splitParts=[];}
 let repairCore;
 function loadRepairCore(){
   if(!repairCore)repairCore=import('meshfix-wasm/dist/meshfix-core.js')
@@ -30,7 +33,7 @@ function releaseResult(){if(result&&result!==base)result.delete();result=null;}
 function install(next,data,extra={}){
   let packet;
   try{packet=withBVH(next?fromManifold(next):data);}catch(err){next?.delete();throw err;}
-  releaseResult();base?.delete();base=next;offset=data.offset||[0,0,0];
+  clearSplit();releaseResult();base?.delete();base=next;offset=data.offset||[0,0,0];
   const box=next?.boundingBox(),size=box?box.max.map((v,k)=>v-box.min[k]):data.size;
   return {...packet,size,offset,volume:next?.volume()||0,valid:!!next,...extra};
 }
@@ -54,7 +57,18 @@ self.onmessage=async({data:{id,type,payload}})=>{
       if(!sourceData)throw new Error('Importe um STL para reparar.');
       const {repaired,solid:next}=await repairSolid(module,sourceData,payload.options,loadRepairCore);
       response=install(next,repaired,{repairReport:repaired.repairReport,patchPositions:repaired.patchPositions});
+    }else if(type==='split'){
+      if(!base)throw new Error('Repare a malha antes de dividir a peça.');
+      const next=organicSplit(module,result||base,payload);
+      try{response={parts:next.parts.map(fromManifold),report:next.report};}
+      catch(error){next.parts.forEach(p=>p.delete());throw error;}
+      clearSplit();splitParts=next.parts;
+    }else if(type==='exportSplit'){
+      if(!Number.isInteger(payload.part)||!splitParts[payload.part])throw new Error('Calcule o corte antes de exportar.');
+      const buffer=binarySTL(fromManifold(splitParts[payload.part]),offset);
+      self.postMessage({id,ok:true,payload:{buffer}},[buffer]);return;
     }else if(type==='cut'){
+      clearSplit();
       if(!base)throw new Error('Repare a malha antes de criar cavidades.');
       const calculated=lysProject?cutLysCavities(module,base,payload.cavities,envelope,lysProject):{solid:cutWithReinforcement(module,base,payload.cavities,envelope)};
       const next=calculated.solid;

@@ -1,3 +1,4 @@
+import { setupOrganic } from './organic-ui.js';
 import './style.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -12,6 +13,7 @@ const refreshIcons = () => createIcons({ icons, attrs: { 'aria-hidden': 'true' }
 const fmt = (x, digits=2) => x.toLocaleString('pt-BR', { maximumFractionDigits:digits, minimumFractionDigits:digits });
 const state = { cavities:[], selected:null, placing:false, reposition:false, busy:false, original:null, displayed:null, name:'suporte-demo.stl', size:[64,44,39], undo:[], redo:[], revision:0, applied:-1, section:false, wireframe:false, alive:true, meshValid:false, repairReport:null, lys:null };
 const fields = ['diameter','thickness','diameterAllowance','depthAllowance','wall','bottom'];
+let cutTool;
 let toastTimer, requestID=0, worker, baseMesh, resultMesh, ghost, hoverHit, down, markerGroups=[], grid, axes, exportURL, patchMesh;
 const requests = new Map();
 function setStatus(text) { $('status').textContent = text; }
@@ -64,7 +66,7 @@ THREE.Mesh.prototype.raycast=acceleratedRaycast;
 function attachTree(data) { const g=toGeometry(data);g.boundsTree=MeshBVH.deserialize(data.bvh,g);return g; }
 function fit(top=false) {
   if(!baseMesh) return;
-  const bounds=new THREE.Box3().setFromObject(baseMesh),center=bounds.getCenter(new THREE.Vector3()),size=bounds.getSize(new THREE.Vector3());
+  const bounds=cutTool?.bounds()||new THREE.Box3().setFromObject(baseMesh),center=bounds.getCenter(new THREE.Vector3()),size=bounds.getSize(new THREE.Vector3());
   const max=Math.max(size.x,size.y,size.z),distance=max/(2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2)))*1.4/Math.min(camera.aspect,1);
   controls.target.copy(center);camera.position.copy(center).add(new THREE.Vector3(...(top?[0,-.001,1]:[1.12,-1.55,1.13])).normalize().multiplyScalar(distance));
   camera.near=Math.max(max/10000,.001);camera.far=Math.max(max*100,100);camera.updateProjectionMatrix();controls.minDistance=max*.12;controls.maxDistance=max*15;controls.update();
@@ -96,7 +98,7 @@ function updateDimensions(){
 }
 function snapshot(){state.undo.push(JSON.stringify(state.cavities));if(state.undo.length>50)state.undo.shift();state.redo=[];}
 function invalidateDownload(){if(exportURL){URL.revokeObjectURL(exportURL);exportURL=null;}$('download-again').hidden=true;$('support-result').hidden=true;$('support-result').textContent='';}
-function changed(){$('drain-result').hidden=true;invalidateDownload();state.revision++;state.applied=-1;displayBase();renderCavities();makeMarkers();syncButtons();setStatus('Alterações pendentes · confira os cortes antes de exportar.');}
+function changed(){cutTool?.invalidate();$('drain-result').hidden=true;invalidateDownload();state.revision++;state.applied=-1;displayBase();renderCavities();makeMarkers();syncButtons();setStatus('Alterações pendentes · confira os cortes antes de exportar.');}
 function history(redo=false){
   if(state.busy||state.placing)return;const from=redo?state.redo:state.undo,to=redo?state.undo:state.redo;if(!from.length)return;
   to.push(JSON.stringify(state.cavities));state.cavities=JSON.parse(from.pop());state.selected=null;changed();renderSettings();
@@ -130,6 +132,7 @@ function disposeGroup(g){scene.remove(g);g.traverse(o=>{o.geometry?.dispose();if
 function makeMarkers(){markerGroups.forEach(disposeGroup);markerGroups=state.cavities.map(c=>{const g=marker(c);scene.add(g);return g;});}
 function clearGhost(){if(ghost){disposeGroup(ghost);ghost=null;}hoverHit=null;}
 function setPlacement(on,reposition=false){
+  if(on&&cutTool?.active)return;
   if(on){if(!state.meshValid){toast('Repare a malha antes de posicionar cavidades.',true);return;}try{validParams();}catch(e){toast(e.message,true);return;}state.section=false;updateSection();if(!reposition){state.selected=null;renderSettings();renderCavities();}}
   state.placing=on;state.reposition=on&&reposition;controls.enableRotate=!on;clearGhost();
   $('add').classList.toggle('active',on);$('view-mode').textContent=on?'POSICIONAR NA SUPERFÍCIE':'MODO DE INSPEÇÃO';
@@ -166,6 +169,7 @@ function syncButtons(){
   for(const id of ['add','apply','export','export-lys','reposition'])$(id).disabled=state.busy||!baseMesh||!state.alive||!state.meshValid;
   $('repair').disabled=state.busy||!baseMesh||!state.alive||state.meshValid;
   $('undo').disabled=state.busy||!state.undo.length||state.placing;$('redo').disabled=state.busy||!state.redo.length||state.placing;
+  cutTool?.sync();
 }
 function updateRepairPanel(data){
   state.meshValid=data.valid;state.repairReport=data.repairReport||null;
@@ -191,6 +195,7 @@ function updateRepairPanel(data){
   }
 }
 function acceptModel(data,name,fitView=true){
+  cutTool?.reset();
   setPlacement(false);displayBase();disposeMesh(baseMesh);baseMesh=new THREE.Mesh(attachTree(data),modelMaterial);scene.add(baseMesh);
   invalidateDownload();state.lys=data.lys||null;state.original=data;state.size=data.size;state.name=name;state.cavities=[];state.selected=null;state.undo=[];state.redo=[];state.revision++;state.applied=state.revision;
   $('filename').textContent=state.name;$('triangles').textContent=fmt(data.indices.length/3,0);$('dimensions').textContent=data.size.map(x=>fmt(x,1)).join(' × ')+' mm';
@@ -277,6 +282,7 @@ $('wireframe').onclick=()=>{state.wireframe=!state.wireframe;modelMaterial.wiref
 $('section').onclick=()=>{setPlacement(false);state.section=!state.section;updateSection();};$('section-range').oninput=updateSection;
 $('undo').onclick=()=>history();$('redo').onclick=()=>history(true);$('help').onclick=()=>$('help-dialog').showModal();
 window.addEventListener('keydown',e=>{
+  if(cutTool?.active)return;
   if(e.target.matches('input,select,textarea')||$('help-dialog').open||state.busy)return;
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();history(e.shiftKey);}
   else if(e.key==='Escape')setPlacement(false);
@@ -289,4 +295,5 @@ window.addEventListener('dragover',e=>e.preventDefault());window.addEventListene
 window.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;$('drop-overlay').hidden=true;if(e.dataTransfer.files[0]&&!state.busy)loadModel('import',e.dataTransfer.files[0]);});
 window.addEventListener('beforeunload',e=>{if(state.cavities.length){e.preventDefault();e.returnValue='';}});
 function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera);}animate();
+cutTool=setupOrganic({state,scene,camera,controls,renderer,request,busy,toast,setStatus,base:()=>baseMesh,setPlacement,displayBase,updateSection,fit,syncButtons,applyCuts,hideMarkers:()=>{markerGroups.forEach(g=>g.visible=false);if(patchMesh)patchMesh.visible=false;}});
 refreshIcons();renderCavities();updateDimensions();initializeWorker();loadModel('demo');
