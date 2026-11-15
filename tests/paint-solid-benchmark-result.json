@@ -1,0 +1,208 @@
+{
+  "date": "2026-10-14T20:26:05.427Z",
+  "runtime": "v24.15.0",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "phases": {
+    "source": 1064.145041,
+    "bvh": 584.165708,
+    "topology": 274.74529200000006,
+    "brushBVHVisibilityGeodesic": 10.083624999999756,
+    "paintStroke": 0.5324169999998958,
+    "undo": 0.11866600000030303,
+    "redo": 0.05920800000012605,
+    "hemisphereSelection": 9.014333000000079,
+    "boundary": 41.8880409999997,
+    "smoothPreview": 28.535083000000213,
+    "connectedBrush": 0.6606670000001031,
+    "validateSolid": 1712.1172080000001,
+    "separateAndSweep": 22138.587334,
+    "keyAndSweep": 3030.2592079999995,
+    "export": 582.1712919999991,
+    "reimport": 1784.845541999999
+  },
+  "memory": {
+    "source": {
+      "rssMB": 830.898176,
+      "heapMB": 12.802736,
+      "arrayBuffersMB": 83.934507
+    },
+    "bvh": {
+      "rssMB": 1200.996352,
+      "heapMB": 196.702352,
+      "arrayBuffersMB": 157.556515
+    },
+    "topology": {
+      "rssMB": 1308.295168,
+      "heapMB": 11.944264,
+      "arrayBuffersMB": 136.585007
+    },
+    "brushBVHVisibilityGeodesic": {
+      "rssMB": 1309.884416,
+      "heapMB": 27.315056,
+      "arrayBuffersMB": 136.585007
+    },
+    "paintStroke": {
+      "rssMB": 1309.999104,
+      "heapMB": 27.14216,
+      "arrayBuffersMB": 138.686159
+    },
+    "undo": {
+      "rssMB": 1310.015488,
+      "heapMB": 27.2028,
+      "arrayBuffersMB": 138.686159
+    },
+    "redo": {
+      "rssMB": 1310.015488,
+      "heapMB": 27.252312,
+      "arrayBuffersMB": 138.686159
+    },
+    "hemisphereSelection": {
+      "rssMB": 1312.145408,
+      "heapMB": 27.493328,
+      "arrayBuffersMB": 140.783311
+    },
+    "boundary": {
+      "rssMB": 1314.439168,
+      "heapMB": 29.461384,
+      "arrayBuffersMB": 151.269071
+    },
+    "smoothPreview": {
+      "rssMB": 1320.812544,
+      "heapMB": 29.536568,
+      "arrayBuffersMB": 157.560527
+    },
+    "connectedBrush": {
+      "rssMB": 1320.828928,
+      "heapMB": 29.814504,
+      "arrayBuffersMB": 157.560527
+    },
+    "validateSolid": {
+      "rssMB": 1364.885504,
+      "heapMB": 12.612,
+      "arrayBuffersMB": 111.423171
+    },
+    "separateAndSweep": {
+      "rssMB": 1934.573568,
+      "heapMB": 150.82548,
+      "arrayBuffersMB": 249.800259
+    },
+    "keyAndSweep": {
+      "rssMB": 2396.73344,
+      "heapMB": 115.84032,
+      "arrayBuffersMB": 221.171579
+    },
+    "export": {
+      "rssMB": 2456.715264,
+      "heapMB": 67.258808,
+      "arrayBuffersMB": 194.346951
+    },
+    "reimport": {
+      "rssMB": 2505.228288,
+      "heapMB": 217.337608,
+      "arrayBuffersMB": 271.199031
+    }
+  },
+  "triangles": 2097152,
+  "brushFaces": 968,
+  "strokeHistoryBytes": 4000,
+  "boundaryEdges": 2048,
+  "loops": 1,
+  "typedSelectionAndTopologyMB": 27.262976,
+  "separation": {
+    "closed": true,
+    "oriented": true,
+    "components": [
+      1,
+      1
+    ],
+    "overlap": 0,
+    "outside": 0,
+    "originalVolume": 268081.0890778879,
+    "volumes": [
+      138942.3948023779,
+      128648.50913230027
+    ],
+    "removedForSeating": 490.1851432097028,
+    "exteriorDisplacement": 0,
+    "path": {
+      "status": "clear",
+      "method": "continuous-triangle-sat",
+      "travel": 1.1000000000000025,
+      "testedPairs": 94988,
+      "collision": null,
+      "tolerance": 0.000001
+    }
+  },
+  "key": {
+    "closed": true,
+    "oriented": true,
+    "components": [
+      1,
+      1
+    ],
+    "overlap": 0,
+    "outside": 0,
+    "originalVolume": 268081.0890778879,
+    "volumes": [
+      138992.62440562667,
+      128584.692421735
+    ],
+    "removedForSeating": 490.1851432097028,
+    "exteriorDisplacement": 0,
+    "path": {
+      "status": "clear",
+      "method": "continuous-triangle-sat",
+      "travel": 5.100000000000002,
+      "testedPairs": 95223,
+      "collision": null,
+      "tolerance": 0.000001
+    },
+    "key": {
+      "shape": "round",
+      "maleSelected": true,
+      "point": [
+        0,
+        0,
+        -1
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "width": 4,
+      "height": 3,
+      "length": 4,
+      "anchor": 2,
+      "lateral": 0.2,
+      "bottom": 0.3,
+      "wall": 1,
+      "male": {
+        "width": 4,
+        "height": 4,
+        "length": 4,
+        "taper": 0,
+        "slope": 0,
+        "offset": 0,
+        "bottom": 0
+      },
+      "socket": {
+        "width": 4.4,
+        "height": 4.4,
+        "length": 4.3,
+        "taper": 0,
+        "slope": 0,
+        "offset": 0.2,
+        "bottom": 0.3
+      },
+      "minimumWall": 1
+    }
+  },
+  "roundtrip": {
+    "status": "NoError",
+    "volumeDifference": 0.00007498529157601297
+  },
+  "peakRSSMB": 2716.79488,
+  "note": "Synthetic closed sphere above two million triangles. Node measurements on this host; includes BVH, topology, stroke history, boundary and smoothing. Does not measure browser GPU allocations. Solid stages are included only when invoked with --solid; inspect solidError and path.status before interpreting results. No unlimited-memory or arbitrary-STL guarantee."
+}

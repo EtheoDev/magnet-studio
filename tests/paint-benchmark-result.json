@@ -1,0 +1,84 @@
+{
+  "date": "2026-10-14T15:16:38.277Z",
+  "runtime": "v24.15.0",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "phases": {
+    "source": 1083.702916,
+    "bvh": 558.6108749999999,
+    "topology": 263.6993339999999,
+    "brushBVHVisibilityGeodesic": 9.003083999999944,
+    "paintStroke": 0.29399999999986903,
+    "undo": 0.09583299999985684,
+    "redo": 0.09770800000023883,
+    "hemisphereSelection": 8.492792000000009,
+    "boundary": 41.457958999999846,
+    "smoothPreview": 27.923999999999978,
+    "connectedBrush": 0.6865840000000389
+  },
+  "memory": {
+    "source": {
+      "rssMB": 832.159744,
+      "heapMB": 12.801936,
+      "arrayBuffersMB": 83.934507
+    },
+    "bvh": {
+      "rssMB": 1202.323456,
+      "heapMB": 196.716624,
+      "arrayBuffersMB": 157.556515
+    },
+    "topology": {
+      "rssMB": 1309.392896,
+      "heapMB": 11.90552,
+      "arrayBuffersMB": 136.585007
+    },
+    "brushBVHVisibilityGeodesic": {
+      "rssMB": 1310.998528,
+      "heapMB": 27.033696,
+      "arrayBuffersMB": 136.585007
+    },
+    "paintStroke": {
+      "rssMB": 1311.096832,
+      "heapMB": 27.004472,
+      "arrayBuffersMB": 138.686159
+    },
+    "undo": {
+      "rssMB": 1311.113216,
+      "heapMB": 27.058208,
+      "arrayBuffersMB": 138.686159
+    },
+    "redo": {
+      "rssMB": 1311.1296,
+      "heapMB": 27.125608,
+      "arrayBuffersMB": 138.686159
+    },
+    "hemisphereSelection": {
+      "rssMB": 1313.243136,
+      "heapMB": 27.337608,
+      "arrayBuffersMB": 140.783311
+    },
+    "boundary": {
+      "rssMB": 1315.586048,
+      "heapMB": 29.292088,
+      "arrayBuffersMB": 151.269071
+    },
+    "smoothPreview": {
+      "rssMB": 1321.975808,
+      "heapMB": 29.367272,
+      "arrayBuffersMB": 157.560527
+    },
+    "connectedBrush": {
+      "rssMB": 1321.975808,
+      "heapMB": 29.651072,
+      "arrayBuffersMB": 157.560527
+    }
+  },
+  "triangles": 2097152,
+  "brushFaces": 968,
+  "strokeHistoryBytes": 4000,
+  "boundaryEdges": 2048,
+  "loops": 1,
+  "typedSelectionAndTopologyMB": 27.262976,
+  "peakRSSMB": 1322.008576,
+  "note": "Synthetic closed sphere above two million triangles. Node measurements on this host; includes BVH, topology, stroke history, boundary and smoothing. Does not measure browser GPU allocations. Solid stages are included only when invoked with --solid; inspect solidError and path.status before interpreting results. No unlimited-memory or arbitrary-STL guarantee."
+}
