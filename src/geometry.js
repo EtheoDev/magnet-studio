@@ -97,6 +97,13 @@ export function createCutter(module, cavity) {
   return axialCylinder(module,cavity,diameter,depth,Math.max(0.5,diameter/2));
 }
 
+export function createDrainCutter(module, drain) {
+  if(!Number.isFinite(drain.diameter)||drain.diameter<=0||!Number.isFinite(drain.thickness)||drain.thickness<=0)throw new Error('Dimensões de drenagem inválidas.');
+  // Drainage may be smaller than the minimum magnet size.
+  validateCavity({...drain,diameter:Math.max(.5,drain.diameter),thickness:Math.max(.2,drain.thickness)});
+  return axialCylinder(module,drain,drain.diameter,drain.thickness,Math.max(.5,drain.diameter/2));
+}
+
 // Also used for drainage smaller than the minimum magnet size.
 export function axialCylinder(module,cavity,diameter,depth,outward=0.02) {
   const n = cavity.normal, { u, v } = tangentBasis(n);
@@ -118,12 +125,12 @@ export function createReinforcement(module,c,envelope) {
   try{return tool.intersect(envelope);}finally{tool.delete();}
 }
 
-export function cutCavities(module, base, cavities) {
+export function cutCavities(module, base, cavities, createTool=createCutter) {
   if (cavities.length > LIMITS.cavities) throw new Error('O limite desta versão é 100 cavidades.');
   let current = base;
   try {
     for (const c of cavities) {
-      const cutter = createCutter(module, c);
+      const cutter = createTool(module, c);
       let next;
       try {
         next = current.subtract(cutter);

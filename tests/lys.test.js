@@ -12,7 +12,7 @@ async function fixture(change=s=>s){
   const a=fromManifold(outer),b=fromManifold(inner);outer.delete();inner.delete();
   for(let i=0;i<b.indices.length;i+=3)[b.indices[i+1],b.indices[i+2]]=[b.indices[i+2],b.indices[i+1]];
   const scene={appVersion:'7.6.4',objects:{present:{byId:{o1:{id:'o1',type:'file',name:'Synthetic',properties:{hash:'mesh'},scale:{x:1,y:1,z:1},rotation:{x:10,y:20,z:30},position:{x:4,y:5,z:6},hollowing:{enabled:true,outer:2},holes:['h1'],foundation:{enabled:true,type:'vectorielWall'}}}}},supports:{present:{byId:{s1:{id:'s1',tip:{x:1,y:2,z:3},custom:'preserve'}},allIds:['s1']}},holes:{present:{byId:{h1:{id:'h1',objectId:'o1',tip:{x:8,y:0,z:10},tipNormal:{x:0,y:0,z:1},settings:{type:'cylinder',diameter:2,depth:3}}},allIds:['h1']}}};
-  change(scene);
+  change(scene,{outer:a,inner:b});
   return writeLysContainer({version:'3.1.0'},new Map([['mesh.bin',writeLysMesh(a)],['mesh_hollowing.bin',writeLysMesh(b)],['scene.bin',transformSceneBytes(encode(scene),true)]]));
 }
 function free(p){p.solid.delete();p.envelope.delete();}
@@ -106,7 +106,7 @@ test('LYS imports solid objects with inactive hollowing settings and roundtrips 
     }finally{free(p);}
   }
 });
-test('LYS ignores disabled and unrelated blockers but rejects active or unknown blockers',async()=>{
+test('LYS imports cached hollowing with blocker metadata',async()=>{
   for(const blocker of [{id:'b1',objectId:'o1',enabled:false},{id:'b1',objectId:'other'}]){
     const p=await importLys(m,await fixture(s=>{
       s.hollowBlockers={present:{byId:{b1:blocker}}};
@@ -114,18 +114,46 @@ test('LYS ignores disabled and unrelated blockers but rejects active or unknown 
     }));
     try{assert.equal(p.info.wall,2);assert.ok(p.solid.volume()<3904);}finally{free(p);}
   }
-  for(const blocker of [{id:'b1',objectId:'o1'},{id:'b1'}]){
-    await assert.rejects(importLys(m,await fixture(s=>{
-      s.hollowBlockers={present:{byId:{b1:blocker}}};
-    })),/bloqueadores de escavação ativos/);
-  }
-  await assert.rejects(importLys(m,await fixture(s=>{
-    s.objects.present.byId.o1.hollowBlockers=['missing'];
-  })),/bloqueadores de escavação ativos/);
   await assert.rejects(importLys(m,await fixture(s=>{
     s.objects.present.byId.o1.hollowing={enabled:false,infillEnabled:true};
     s.objects.present.byId.o1.hasHollowing2D=true;
   })),/preenchimento interno ativo/);
+});
+test('LYS preserves baked blocker material, drains and supports through export',async()=>{
+  const p=await importLys(m,await fixture((s,{inner})=>{
+    // Cached void occupies only x=0..8: the blocker keeps x=-8..0 solid.
+    for(let i=0;i<inner.positions.length;i+=3)inner.positions[i]=inner.positions[i]/2+4;
+    s.objects.present.byId.o1.hollowBlockers=['hb1'];
+    s.objects.present.byId.o1.hasHollowing2D=true;
+    s.hollowBlockers={present:{byId:{hb1:{id:'hb1',objectId:'o1',type:'cube',stlMatrix:[1,0,0,0,0,1,0,0,0,0,1,0,-4,0,0,1]},other:{id:'other',objectId:'other'}},allIds:['hb1','other'],selectedId:'hb1',selectedIds:['hb1','other']}};
+  }));
+  const before=structuredClone(p.project.scene);
+  try{
+    assert.equal(p.info.drains,1);assert.equal(p.info.wall,2);
+    assert.ok(boxVolume(p.solid,[-4,0,0],[1,1,1])>.99,'Blocked region must remain solid');
+    assert.ok(boxVolume(p.solid,[4,0,0],[1,1,1])<1e-6,'Cached void must remain hollow');
+    assert.ok(boxVolume(p.solid,[8,0,9],[.5,.5,1])<1e-6,'Drain must remain open');
+    const again=await importLys(m,await exportLys(p.project,fromManifold(p.solid)));
+    try{
+      assert.ok(Math.abs(again.solid.volume()-p.solid.volume())<.001);
+      assert.ok(boxVolume(again.solid,[-4,0,0],[1,1,1])>.99);
+      assert.ok(boxVolume(again.solid,[4,0,0],[1,1,1])<1e-6);
+      assert.deepEqual(again.project.scene.supports,p.project.scene.supports);
+      assert.deepEqual(again.project.scene.objects.present.byId.o1.hollowBlockers,[]);
+      const blockers=again.project.scene.hollowBlockers.present;
+      assert.deepEqual(blockers.byId,{other:before.hollowBlockers.present.byId.other});
+      assert.deepEqual(blockers.allIds,['other']);assert.equal(blockers.selectedId,null);assert.deepEqual(blockers.selectedIds,['other']);
+    }finally{free(again);}
+    assert.deepEqual(p.project.scene,before);
+  }finally{free(p);}
+});
+test('LYS requires a valid cached inner mesh instead of dropping hollowing or blockers',async()=>{
+  for(const corrupt of [false,true]){
+    const project=await readLysContainer(await fixture(s=>{s.objects.present.byId.o1.hollowBlockers=['hb1'];}));
+    if(corrupt)project.entries.set('mesh_hollowing.bin',new Uint8Array(20));
+    else project.entries.delete('mesh_hollowing.bin');
+    await assert.rejects(importLys(m,await writeLysContainer(project.manifest,project.entries)),corrupt?/malha LYS/:/malha interna calculada/);
+  }
 });
 test('LYS mesh decoder rejects bad indices and nonfinite coordinates',()=>{
   const cube=m.Manifold.cube([2,2,2]),data=fromManifold(cube);cube.delete();
@@ -236,4 +264,179 @@ test('Multiple cavities receive independent central drains and survive STL round
     for(const x of [-3,3])assert.ok(boxVolume(result,[x,0,6],[.25,.25,.5])<1e-6);
     const restored=toManifold(m,parseSTL(binarySTL(fromManifold(result))));try{assert.ok(Math.abs(restored.volume()-result.volume())<.001);}finally{restored.delete();}
   }finally{result?.delete();free(p);}
+});
+
+test('A solid region above a distant internal void gets a blind magnet pocket without a drainage tunnel',async()=>{
+  const p=await importLys(m,await fixture((s,{inner})=>{
+    s.holes.present.byId={};
+    // Void lies 14 mm below the surface, despite the configured 2 mm shell.
+    for(let i=2;i<inner.positions.length;i+=3)inner.positions[i]=inner.positions[i]*.25-6;
+  }));let cut,expected;
+  try{
+    cut=cutLysCavities(m,p.solid,[pocket],p.envelope,p.project);
+    expected=cutWithReinforcement(m,p.solid,[pocket],p.envelope);
+    assert.equal(cut.drainReport.added,0);assert.equal(cut.drainReport.skipped,1);
+    assert.ok(Math.abs(cut.solid.volume()-expected.volume())<1e-6);
+    assert.ok(boxVolume(cut.solid,[0,0,0],[1,1,1])>.99,'Material along the previous long tunnel must remain intact');
+    assert.ok(boxVolume(cut.solid,[0,0,8],[1,1,1])<1e-6,'Magnet pocket must still be cut');
+    const again=await importLys(m,await exportLys(p.project,fromManifold(cut.solid)));
+    try{assert.ok(Math.abs(again.solid.volume()-cut.solid.volume())<.001);}finally{free(again);}
+  }finally{cut?.solid.delete();expected?.delete();free(p);}
+});
+
+test('Automatic drainage is decided per magnet and a solid blocker region needs no internal opening',async()=>{
+  const p=await importLys(m,await fixture((s,{inner})=>{
+    s.holes.present.byId={};
+    for(let i=0;i<inner.positions.length;i+=3)inner.positions[i]=inner.positions[i]*.5+4;
+  }));let cut;
+  try{
+    const cavities=[-4,4].map(x=>({...pocket,point:[x,0,10],diameter:2,thickness:1,diameterAllowance:0,depthAllowance:0,reinforce:false}));
+    cut=cutLysCavities(m,p.solid,cavities,p.envelope,p.project);
+    assert.equal(cut.drainReport.added,1);assert.equal(cut.drainReport.skipped,1);
+    assert.ok(boxVolume(cut.solid,[-4,0,8],[.1,.1,.1])>.00099,'Solid pocket keeps its floor');
+    assert.ok(boxVolume(cut.solid,[4,0,8],[.1,.1,.1])<1e-8,'Hollow pocket drains through the nearby shell');
+    assert.equal(cut.solid.status(),'NoError');
+  }finally{cut?.solid.delete();free(p);}
+});
+
+test('Replacing a local drain allows the measured hole depth when the actual shell exceeds its configured thickness',async()=>{
+  const p=await importLys(m,await fixture((s,{inner})=>{
+    // Actual upper wall is 3 mm, but the saved hollowing setting says 2 mm.
+    for(let i=2;i<inner.positions.length;i+=3)inner.positions[i]*=.875;
+    s.holes.present.byId.h1.tip.x=0;
+    s.holes.present.byId.h1.settings.depth=4;
+  }));let cut;
+  try{
+    cut=cutLysCavities(m,p.solid,[pocket],p.envelope,p.project);
+    assert.equal(cut.drainReport.removed,1);assert.equal(cut.drainReport.added,1);assert.equal(cut.drainReport.skipped,0);
+    assert.ok(boxVolume(cut.solid,[0,0,6],[.2,.2,.2])<1e-8,'Replacement must pierce the reinforcement floor');
+    assert.ok(boxVolume(cut.solid,[1.3,0,6],[.2,.2,.2])>.0079,'Floor remains around the central drain');
+    assert.ok(boxVolume(cut.solid,[0,0,-9],[.2,.2,.2])>.0079,'Opposite wall remains intact');
+    const again=await importLys(m,await exportLys(p.project,fromManifold(cut.solid)));
+    try{assert.ok(boxVolume(again.solid,[0,0,6],[.2,.2,.2])<1e-8);assert.ok(Math.abs(again.solid.volume()-cut.solid.volume())<.001);}finally{free(again);}
+  }finally{cut?.solid.delete();free(p);}
+});
+
+test('A replaced drain cannot authorize a tunnel from another magnet through a solid region',async()=>{
+  const p=await importLys(m,await fixture((s,{inner})=>{
+    // Deep void for both magnets. Only the first already has a matching hole.
+    for(let i=2;i<inner.positions.length;i+=3)inner.positions[i]=inner.positions[i]*.25-6;
+    s.holes.present.byId.h1.tip.x=-4;s.holes.present.byId.h1.settings.depth=15;
+  }));let cut;
+  try{
+    const cavities=[-4,4].map(x=>({...pocket,point:[x,0,10],diameter:2,reinforce:false}));
+    cut=cutLysCavities(m,p.solid,cavities,p.envelope,p.project);
+    assert.equal(cut.drainReport.removed,1);assert.equal(cut.drainReport.added,1);assert.equal(cut.drainReport.skipped,1);
+    assert.ok(boxVolume(cut.solid,[-4,0,0],[.1,.1,.1])<1e-8);
+    assert.ok(boxVolume(cut.solid,[4,0,0],[.1,.1,.1])>.00099,'Other pocket must not acquire a long tunnel');
+    assert.ok(boxVolume(cut.solid,[-4,0,-9],[.1,.1,.1])>.00099,'Existing hole depth still cannot pierce the opposite wall');
+  }finally{cut?.solid.delete();free(p);}
+});
+
+test('A blind original hole cannot be silently closed or extended to a distant void',async()=>{
+  const p=await importLys(m,await fixture((s,{inner})=>{
+    for(let i=2;i<inner.positions.length;i+=3)inner.positions[i]=inner.positions[i]*.25-6;
+    s.holes.present.byId.h1.tip.x=0;
+  }));
+  try{
+    const volume=p.solid.volume();
+    assert.throws(()=>cutLysCavities(m,p.solid,[pocket],p.envelope,p.project),/profundidade original/);
+    assert.equal(p.solid.volume(),volume);
+    assert.ok(boxVolume(p.solid,[0,0,9],[.1,.1,.1])<1e-8,'Rejected operation preserves the original hole');
+  }finally{free(p);}
+});
+
+async function assertNativeRoundtrip(p,cut) {
+  const before=structuredClone(p.project.scene);
+  const exported=await exportLysWithReport(p.project,fromManifold(cut.solid),{nativeGeometry:cut.nativeGeometry});
+  const again=await importLys(m,exported.buffer);
+  try{
+    const object=again.project.scene.objects.present.byId[p.project.objectId];
+    assert.equal(exported.hollowingPreserved,!!cut.nativeGeometry.inner);
+    assert.equal(object.hollowing.enabled,!!cut.nativeGeometry.inner);
+    assert.equal(object.hollowing.outer,p.project.scene.objects.present.byId[p.project.objectId].hollowing.outer);
+    assert.ok(again.project.entries.has(again.project.stem+'_hollowing.bin')===!!cut.nativeGeometry.inner);
+    assert.equal(again.info.drains,cut.nativeGeometry.holes.length);
+    assert.deepEqual(object.holes,cut.nativeGeometry.holes.map(h=>h.id));
+    assert.equal(new Set(object.holes).size,object.holes.length);
+    assert.ok(Math.abs(again.solid.volume()-cut.solid.volume())<.001);
+    const missing=cut.solid.subtract(again.solid),extra=again.solid.subtract(cut.solid);
+    try{assert.ok(missing.volume()<.001);assert.ok(extra.volume()<.001);}finally{missing.delete();extra.delete();}
+    assert.deepEqual(p.project.scene,before);
+    return {scene:again.project.scene,supportReport:exported.supportReport};
+  }finally{free(again);}
+}
+
+test('Native LYS export keeps original hollowing settings, both meshes, blockers, holes and placements',async()=>{
+  const p=await importLys(m,await fixture(s=>{
+    s.objects.present.byId.o1.hasHollowing2D=true;
+    s.objects.present.byId.o1.hollowing.wallPrecision=1;
+    s.objects.present.byId.o1.hollowBlockers=['hb1'];
+    s.hollowBlockers={present:{byId:{hb1:{id:'hb1',objectId:'o1',type:'cube'}},allIds:['hb1']}};
+  }));
+  try{
+    const cut=cutLysCavities(m,p.solid,[],p.envelope,p.project);
+    const {scene}=await assertNativeRoundtrip(p,cut);
+    const old=p.project.scene.objects.present.byId.o1,next=scene.objects.present.byId.o1;
+    for(const key of ['hollowing','hasHollowing2D','hollowBlockers','position','rotation','scale','foundation'])assert.deepEqual(next[key],old[key]);
+    assert.deepEqual(scene.hollowBlockers,p.project.scene.hollowBlockers);
+    assert.deepEqual(scene.holes,p.project.scene.holes);
+  }finally{free(p);}
+});
+
+test('Native LYS export preserves the reinforced inner surface and replaces drainage with native holes',async()=>{
+  const p=await importLys(m,await fixture(s=>{
+    s.holes.present.byId.h1.tip.x=0;
+    s.supports.present.byId.s1={id:'s1',objectIdTip:'o1',tip:{x:2,y:0,z:10},tipNormal:{x:0,y:0,z:1},base:{x:2,y:0,z:20},parentTipId:null,parentBaseId:'trunk',settings:{tip:{type:'cone',length:3,angle:100,pointDiameter:.6,penetration:0},base:{diameter:1.3}}};
+  }));let cut;
+  try{
+    cut=cutLysCavities(m,p.solid,[pocket],p.envelope,p.project);
+    const {scene,supportReport}=await assertNativeRoundtrip(p,cut);
+    assert.equal(scene.holes.present.allIds.length,1,'Only the replacement drainage is a native hole');
+    const outer=toManifold(m,cut.nativeGeometry.outer);
+    try{
+      assert.ok(boxVolume(outer,[0,0,8],[1,1,1])<1e-6,'The magnet must be present in the external mesh even without native holes');
+      assert.ok(boxVolume(outer,[0,0,6],[.2,.2,.2])>.0079,'The baked recess keeps its floor');
+    }finally{outer.delete();}
+    for(const hole of Object.values(scene.holes.present.byId))assert.ok(hole.settings.diameter<2,'No magnet-sized drainage placeholder may be emitted');
+    assert.ok(!scene.holes.present.byId.h1,'Original drainage is removed');
+    assert.equal(supportReport.adjusted,1);assert.equal(supportReport.unresolved,0);
+    const inner=cut.nativeGeometry.inner,original=p.project.nativeGeometry.inner;
+    assert.notDeepEqual(inner.positions,original.positions,'Reinforcement must modify the cached interior');
+  }finally{cut?.solid.delete();free(p);}
+});
+
+test('Native LYS roundtrips shallow and submillimeter mesh cavities without flattening hollowing',async()=>{
+  for(const c of [{...pocket,thickness:.5,reinforce:false},{...pocket,diameter:.5,thickness:.5,diameterAllowance:0,reinforce:false}]){
+    const p=await importLys(m,await fixture());let cut;
+    try{cut=cutLysCavities(m,p.solid,[c],p.envelope,p.project);await assertNativeRoundtrip(p,cut);}finally{cut?.solid.delete();free(p);}
+  }
+});
+
+
+test('An unreinforced through-pocket remains available for STL but requires a floor for native LYS',async()=>{
+  const p=await importLys(m,await fixture());
+  try{
+    const volume=p.solid.volume();
+    const cut=cutLysCavities(m,p.solid,[{...pocket,reinforce:false}],p.envelope,p.project);
+    try{
+      assert.equal(cut.solid.status(),'NoError');
+      await assert.rejects(exportLysWithReport(p.project,fromManifold(cut.solid),{nativeGeometry:cut.nativeGeometry}),/Ative o reforço interno/);
+    }finally{cut.solid.delete();}
+    assert.equal(p.solid.volume(),volume);
+  }finally{free(p);}
+});
+
+test('A solid LYS exports the magnet recess in its mesh with no native hole objects',async()=>{
+  const p=await importLys(m,await fixture(s=>{
+    s.objects.present.byId.o1.hollowing.enabled=false;
+    s.holes.present.byId={};s.holes.present.allIds=[];
+  }));let cut;
+  try{
+    cut=cutLysCavities(m,p.solid,[{...pocket,reinforce:false}],p.envelope,p.project);
+    const {scene}=await assertNativeRoundtrip(p,cut);
+    assert.deepEqual(scene.holes.present.allIds,[]);
+    const outer=toManifold(m,cut.nativeGeometry.outer);
+    try{assert.ok(boxVolume(outer,[0,0,8],[1,1,1])<1e-6);assert.ok(boxVolume(outer,[0,0,6],[1,1,1])>.99);}finally{outer.delete();}
+  }finally{cut?.solid.delete();free(p);}
 });

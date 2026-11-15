@@ -1,14 +1,11 @@
 import './style.css';
-import './studio.css';
-import { initPaintWorkflow } from './paint-ui.js';
-import { parseSceneFile, coloredGeometry } from './model-import.js';
-import { loadProject } from './project-file.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { MeshBVH, acceleratedRaycast } from 'three-mesh-bvh';
 import { createIcons, Upload, ShieldCheck, CircleHelp, Box, CheckCircle2, Plus, RotateCcw, Scan, Square, Network, Slice, Mouse, SlidersHorizontal, Move, Trash2, Info, Check, Download, Undo2, Redo2, Disc3, Wrench } from 'lucide';
 import { cavityDimensions, validateCavity, toGeometry, LIMITS } from './geometry.js';
 import { validateRepairOptions } from './repair.js';
+import { pickCavitySurface } from './cavity-placement.js';
 
 const icons = { Upload, ShieldCheck, CircleHelp, Box, CheckCircle2, Plus, RotateCcw, Scan, Square, Network, Slice, Mouse, SlidersHorizontal, Move, Trash2, Info, Check, Download, Undo2, Redo2, Disc3, Wrench };
 const $ = id => document.getElementById(id);
@@ -16,8 +13,7 @@ const refreshIcons = () => createIcons({ icons, attrs: { 'aria-hidden': 'true' }
 const fmt = (x, digits=2) => x.toLocaleString('pt-BR', { maximumFractionDigits:digits, minimumFractionDigits:digits });
 const state = { cavities:[], selected:null, placing:false, reposition:false, busy:false, original:null, displayed:null, name:'suporte-demo.stl', size:[64,44,39], undo:[], redo:[], revision:0, applied:-1, section:false, wireframe:false, alive:true, meshValid:false, repairReport:null, lys:null };
 const fields = ['diameter','thickness','diameterAllowance','depthAllowance','wall','bottom'];
-let paint;
-let toastTimer, requestID=0, worker, baseMesh, resultMesh, ghost, hoverHit, down, markerGroups=[], grid, axes, exportURL, patchMesh;
+let toastTimer, requestID=0, worker, baseMesh, resultMesh, ghost, hoverHit, down, markerGroups=[], grid, axes, exportURL, patchMesh, placementMesh;
 const requests = new Map();
 function setStatus(text) { $('status').textContent = text; }
 function toast(text,error=false) { clearTimeout(toastTimer); $('toast').textContent=text; $('toast').hidden=false; $('toast').classList.toggle('error',error); toastTimer=setTimeout(()=>$('toast').hidden=true,error?14000:6000); }
@@ -66,10 +62,10 @@ const clipPlane=new THREE.Plane(new THREE.Vector3(-1,0,0),0);
 const raycaster=new THREE.Raycaster(); raycaster.firstHitOnly=true;
 const pointer=new THREE.Vector2();
 THREE.Mesh.prototype.raycast=acceleratedRaycast;
-function attachTree(data) { const g=data.faceRegions?coloredGeometry(data):toGeometry(data);g.boundsTree=MeshBVH.deserialize(data.bvh,g,{setIndex:!data.faceRegions});return g; }
+function attachTree(data) { const g=toGeometry(data);g.boundsTree=MeshBVH.deserialize(data.bvh,g);return g; }
 function fit(top=false) {
   if(!baseMesh) return;
-  const bounds=paint?.bounds||new THREE.Box3().setFromObject(baseMesh),center=bounds.getCenter(new THREE.Vector3()),size=bounds.getSize(new THREE.Vector3());
+  const bounds=new THREE.Box3().setFromObject(baseMesh),center=bounds.getCenter(new THREE.Vector3()),size=bounds.getSize(new THREE.Vector3());
   const max=Math.max(size.x,size.y,size.z),distance=max/(2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2)))*1.4/Math.min(camera.aspect,1);
   controls.target.copy(center);camera.position.copy(center).add(new THREE.Vector3(...(top?[0,-.001,1]:[1.12,-1.55,1.13])).normalize().multiplyScalar(distance));
   camera.near=Math.max(max/10000,.001);camera.far=Math.max(max*100,100);camera.updateProjectionMatrix();controls.minDistance=max*.12;controls.maxDistance=max*15;controls.update();
@@ -84,8 +80,8 @@ function makeFloor(){
   axes=new THREE.AxesHelper(max*.16);axes.position.set(-max*.66,-max*.6,box.min.z);axes.material.transparent=true;axes.material.opacity=.65;scene.add(axes);
 }
 function disposeMesh(mesh){if(!mesh)return;scene.remove(mesh);mesh.geometry.boundsTree=null;mesh.geometry.dispose();}
-function displayBase(){modelMaterial.vertexColors=!!state.original?.faceRegions;modelMaterial.color.set(modelMaterial.vertexColors?'#ffffff':'#a5b6c8');modelMaterial.needsUpdate=true;markerGroups.forEach(g=>g.visible=true);if(patchMesh){patchMesh.visible=$('show-patches').checked;$('patches-label').hidden=false;}if(resultMesh){disposeMesh(resultMesh);resultMesh=null;}if(baseMesh)baseMesh.visible=true;}
-function showCut(data){displayBase();modelMaterial.vertexColors=false;modelMaterial.color.set('#a5b6c8');modelMaterial.needsUpdate=true;markerGroups.forEach(g=>g.visible=false);if(patchMesh){patchMesh.visible=false;$('patches-label').hidden=true;}baseMesh.visible=false;resultMesh=new THREE.Mesh(attachTree(data),modelMaterial);scene.add(resultMesh);state.displayed=data;updateSection();}
+function displayBase(){markerGroups.forEach(g=>g.visible=true);if(patchMesh){patchMesh.visible=$('show-patches').checked;$('patches-label').hidden=false;}if(resultMesh){disposeMesh(resultMesh);resultMesh=null;}if(baseMesh)baseMesh.visible=true;}
+function showCut(data){displayBase();markerGroups.forEach(g=>g.visible=false);if(patchMesh){patchMesh.visible=false;$('patches-label').hidden=true;}baseMesh.visible=false;resultMesh=new THREE.Mesh(attachTree(data),modelMaterial);scene.add(resultMesh);state.displayed=data;updateSection();}
 function updateSection(){
   modelMaterial.clippingPlanes=state.section?[clipPlane]:[];
   if(patchMesh){patchMesh.material.clippingPlanes=modelMaterial.clippingPlanes;patchMesh.material.needsUpdate=true;}
@@ -135,7 +131,6 @@ function disposeGroup(g){scene.remove(g);g.traverse(o=>{o.geometry?.dispose();if
 function makeMarkers(){markerGroups.forEach(disposeGroup);markerGroups=state.cavities.map(c=>{const g=marker(c);scene.add(g);return g;});}
 function clearGhost(){if(ghost){disposeGroup(ghost);ghost=null;}hoverHit=null;}
 function setPlacement(on,reposition=false){
-  if(on&&paint?.active)paint.exit();
   if(on){if(!state.meshValid){toast('Repare a malha antes de posicionar cavidades.',true);return;}try{validParams();}catch(e){toast(e.message,true);return;}state.section=false;updateSection();if(!reposition){state.selected=null;renderSettings();renderCavities();}}
   state.placing=on;state.reposition=on&&reposition;controls.enableRotate=!on;clearGhost();
   $('add').classList.toggle('active',on);$('view-mode').textContent=on?'POSICIONAR NA SUPERFÍCIE':'MODO DE INSPEÇÃO';
@@ -145,11 +140,7 @@ function setPlacement(on,reposition=false){
 function hitAt(event){
   if(!baseMesh)return null;
   const rect=renderer.domElement.getBoundingClientRect();pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);
-  const hit=raycaster.intersectObject(baseMesh,false)[0];if(!hit)return null;
-  const normal=hit.face.normal.clone().transformDirection(baseMesh.matrixWorld).normalize();
-  // Reject inside/backface placement: don't silently invert the geometry's normal.
-  if(normal.dot(raycaster.ray.direction)>=0)return null;
-  return {point:hit.point.toArray(),normal:normal.toArray()};
+  return pickCavitySurface(raycaster,baseMesh,placementMesh);
 }
 renderer.domElement.addEventListener('pointermove',e=>{
   if(!state.placing||state.busy)return;clearGhost();const hit=hitAt(e);if(!hit)return;
@@ -172,7 +163,6 @@ function syncButtons(){
   for(const id of ['add','apply','export','export-lys','reposition'])$(id).disabled=state.busy||!baseMesh||!state.alive||!state.meshValid;
   $('repair').disabled=state.busy||!baseMesh||!state.alive||state.meshValid;
   $('undo').disabled=state.busy||!state.undo.length||state.placing;$('redo').disabled=state.busy||!state.redo.length||state.placing;
-  paint?.sync();$('section').disabled=state.busy||!!paint?.active;
 }
 function updateRepairPanel(data){
   state.meshValid=data.valid;state.repairReport=data.repairReport||null;
@@ -199,28 +189,27 @@ function updateRepairPanel(data){
 }
 function acceptModel(data,name,fitView=true){
   setPlacement(false);displayBase();disposeMesh(baseMesh);baseMesh=new THREE.Mesh(attachTree(data),modelMaterial);scene.add(baseMesh);
+  disposeMesh(placementMesh);placementMesh=null;
+  if(data.placementSurface)placementMesh=new THREE.Mesh(attachTree(data.placementSurface),modelMaterial);
   invalidateDownload();state.lys=data.lys||null;state.original=data;state.size=data.size;state.name=name;state.cavities=[];state.selected=null;state.undo=[];state.redo=[];state.revision++;state.applied=state.revision;
   $('filename').textContent=state.name;$('triangles').textContent=fmt(data.indices.length/3,0);$('dimensions').textContent=data.size.map(x=>fmt(x,1)).join(' × ')+' mm';
   $('drain-result').hidden=true;$('lys-panel').hidden=!state.lys;$('export-lys').hidden=!state.lys;$('reinforcement').hidden=!state.lys?.wall;
   $('reinforce').checked=!!state.lys?.wall;
   $('export').textContent=state.lys?'Exportar STL só da peça':'Exportar STL';
-  $('export-note').textContent=state.lys?'Suportes e base são preservados somente no LYS':'Geometria real · medidas em milímetros';
+  $('export-note').textContent=state.lys?'LYS mantém escavação, furos, suportes e base. Recalcular a escavação no Lychee pode refazer os reforços.':'Geometria real · medidas em milímetros';
   if(state.lys){const l=state.lys;$('lys-summary').textContent=`${l.drains} drenagens · ${l.supports} registros de suportes${l.foundation?' · com base':''}${l.wall?` · parede configurada: ${fmt(l.wall,1)} mm`:''}`;}
-  updateRepairPanel(data);paint?.reset(data);displayBase();makeFloor();if(fitView)fit();makeMarkers();renderCavities();renderSettings();updateSection();
+  updateRepairPanel(data);makeFloor();if(fitView)fit();makeMarkers();renderCavities();renderSettings();updateSection();
 }
 async function loadModel(type,file){
-  if(file&&!/\.(stl|lys|3mf|obj|magnetlab)$/i.test(file.name)){toast('Escolha um STL, 3MF, OBJ, LYS ou projeto MagnetLab.',true);return;}
+  if(file&&!/\.(stl|lys)$/i.test(file.name)){toast('Escolha um arquivo com extensão .stl ou .lys.',true);return;}
   if(file&&/\.lys$/i.test(file.name)&&file.size>LIMITS.bytes){toast('O limite por arquivo LYS é 200 MB.',true);return;}
   if(file&&/\.lys$/i.test(file.name))type='importLys';
   await busy(type==='demo'?'Preparando a demonstração…':'Lendo e validando o modelo…',async()=>{
-    let payload={},transfer=[],saved;
-    if(file){const buffer=await file.arrayBuffer();payload={buffer,scale:Number($('units').value)};transfer=[buffer];
-      if(/\.(3mf|obj)$/i.test(file.name)){type='importScene';const format=file.name.split('.').pop().toLowerCase(),data=parseSceneFile(buffer,format,Number($('units').value));payload={data};transfer=[data.positions.buffer,data.indices.buffer,data.faceRegions.buffer];}
-      else if(/\.magnetlab$/i.test(file.name)){saved=loadProject(buffer);type='importScene';payload={data:saved.data};transfer=[saved.data.positions.buffer,saved.data.indices.buffer];if(saved.data.faceRegions)transfer.push(saved.data.faceRegions.buffer);}
-    }
+    let payload={},transfer=[];
+    if(file){const buffer=await file.arrayBuffer();payload={buffer,scale:Number($('units').value)};transfer=[buffer];}
     const data=await request(type,payload,transfer);
-    acceptModel(data,saved?saved.name:file?file.name:type==='paintDemo'?'personagem-exemplo':'suporte-demo.stl');$('demo-tag').hidden=!!file;
-    if(data.valid){await paint.activate();if(saved)paint.restore(saved);setStatus(saved?'Projeto restaurado · confira a seleção e recalcule os cortes.':data.palette?`${data.palette.length} regiões disponíveis · clique em uma cor no modelo ou na lista.`:'Modelo pronto · selecione com laço, plano ou clique.');}
+    acceptModel(data,file?file.name:'suporte-demo.stl');$('demo-tag').hidden=!!file;
+    if(data.valid)setStatus(`Modelo pronto · ${fmt(data.elapsed/1000,2)} s para preparar · selecione “Adicionar cavidade”.`);
     else{setStatus('Modelo aberto para inspeção · use “Reparar malha” para liberar os encaixes.');toast('O STL abriu para inspeção. Há defeitos: use “Reparar malha” no painel esquerdo.');}
   });
 }
@@ -238,7 +227,7 @@ async function applyCuts(){
   setStatus(`Cortes calculados em ${fmt(data.elapsed/1000,2)} s · ${fmt(Math.abs(removed),1)} mm³ ${removed>=0?'removidos':'adicionados com reforços'}.`);
   if(data.drainReport){
     const r=data.drainReport;
-    const message=`${r.removed} drenagem(ns) antiga(s) fechada(s) · ${r.added} drenagem(ns) central(is) criada(s)${r.added?' · diâmetro(s): '+r.diameters.map(d=>fmt(d,2)+' mm').join(', '):''}.`;
+    const message=`${r.removed} drenagem(ns) antiga(s) fechada(s) · ${r.added} drenagem(ns) central(is) criada(s)${r.added?' · diâmetro(s): '+r.diameters.map(d=>fmt(d,2)+' mm').join(', '):''}.${r.skipped?` ${r.skipped} cavidade(s) sem vazio interno próximo: sem drenagem automática.`:''}`;
     $('drain-result').textContent=message;$('drain-result').hidden=false;setStatus('Cortes confirmados · '+message);
   }
   if(state.cavities.length&&Math.abs(removed)<.0001)toast('As cavidades não removeram material. Confira as posições.',true);
@@ -285,20 +274,18 @@ $('preset').onchange=()=>{
 $('fit').onclick=()=>fit();$('top-view').onclick=()=>fit(true);
 $('wireframe').onclick=()=>{state.wireframe=!state.wireframe;modelMaterial.wireframe=state.wireframe;$('wireframe').classList.toggle('active',state.wireframe);$('wireframe').setAttribute('aria-pressed',state.wireframe);};
 $('section').onclick=()=>{setPlacement(false);state.section=!state.section;updateSection();};$('section-range').oninput=updateSection;
-$('undo').onclick=()=>paint?.active?paint.history():history();$('redo').onclick=()=>paint?.active?paint.history(true):history(true);$('help').onclick=()=>$(paint?.active?'studio-help':'help-dialog').showModal();
+$('undo').onclick=()=>history();$('redo').onclick=()=>history(true);$('help').onclick=()=>$('help-dialog').showModal();
 window.addEventListener('keydown',e=>{
-  if(e.target.matches('input,select,textarea')||document.querySelector('dialog[open]')||state.busy)return;
-  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();if(paint?.active)paint.history(e.shiftKey);else history(e.shiftKey);}
-  else if(e.key==='Escape'){if(paint?.active)paint.escape();else setPlacement(false);}
-  else if(!paint?.active&&e.key.toLowerCase()==='a'&&!e.ctrlKey&&!e.metaKey&&baseMesh){e.preventDefault();setPlacement(!state.placing);}
+  if(e.target.matches('input,select,textarea')||$('help-dialog').open||state.busy)return;
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();history(e.shiftKey);}
+  else if(e.key==='Escape')setPlacement(false);
+  else if(e.key.toLowerCase()==='a'&&!e.ctrlKey&&!e.metaKey&&baseMesh){e.preventDefault();setPlacement(!state.placing);}
   else if(e.key.toLowerCase()==='f')fit();
 });
 let dragDepth=0;
 window.addEventListener('dragenter',e=>{if(e.dataTransfer.types.includes('Files')){e.preventDefault();dragDepth++;$('drop-overlay').hidden=false;}});
 window.addEventListener('dragover',e=>e.preventDefault());window.addEventListener('dragleave',()=>{dragDepth--;if(dragDepth<=0)$('drop-overlay').hidden=true;});
 window.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;$('drop-overlay').hidden=true;if(e.dataTransfer.files[0]&&!state.busy)loadModel('import',e.dataTransfer.files[0]);});
-window.addEventListener('beforeunload',e=>{if(state.cavities.length||paint?.dirty){e.preventDefault();e.returnValue='';}});
+window.addEventListener('beforeunload',e=>{if(state.cavities.length){e.preventDefault();e.returnValue='';}});
 function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera);}animate();
-paint=initPaintWorkflow({scene,camera,renderer,controls,request,busy,toast,setStatus,state,getMesh:()=>baseMesh,attachTree,displayBase,setPlacement,updateSection,
-  loadPaintDemo:()=>loadModel('paintDemo')});
-refreshIcons();renderCavities();updateDimensions();initializeWorker();loadModel('paintDemo');
+refreshIcons();renderCavities();updateDimensions();initializeWorker();loadModel('demo');

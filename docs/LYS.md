@@ -17,7 +17,9 @@ Implementação local de 9 de outubro de 2026.
 
 A saída LYS conserva base, posição, rotação, impressora, resina e estrutura dos suportes. Pontas compatíveis afetadas pelo corte têm seu ponto de contato e comprimento ajustados; os demais registros de suporte permanecem iguais. A prévia do MagnetLab mostra somente a peça, em coordenadas locais; ao reabrir o LYS, o posicionamento original continua registrado na cena.
 
-A escavação, as drenagens e os encaixes passam a fazer parte da geometria. Os respectivos modificadores de escavação e drenagem são desativados/removidos na cópia para impedir aplicação duplicada. Eles deixam de ser editáveis como parâmetros separados nessa cópia. O original não é alterado. A miniatura do projeto é mantida e pode mostrar a peça antes das alterações.
+A exportação da interface mantém as malhas externa e interna em arquivos separados e conserva a configuração de escavação ativa. Os encaixes são subtraídos da malha externa, com diâmetro, profundidade e folgas aplicados. Somente as drenagens são gravadas como furos cilíndricos nativos; drenagens substituídas são removidas e as novas drenagens recebem identificadores próprios. O original não é alterado. A miniatura do projeto é mantida e pode mostrar a peça antes das alterações.
+
+Os bloqueadores originais são preservados. O reforço dos encaixes modifica a malha interna armazenada, sem misturá-la à malha externa. Recalcular a escavação no Lychee pode substituir essa malha interna e refazer os reforços; confira-os novamente se alterar a parede ou regenerar a escavação. O STL continua sendo uma malha final com todos os cortes aplicados.
 
 A identidade da nova malha é atualizada para evitar reutilizar uma malha antiga em cache. Os hashes SHA-256 e os offsets do contêiner são recalculados.
 
@@ -37,7 +39,7 @@ O reforço é um volume cilíndrico ao redor e abaixo do alojamento, limitado pe
 
 Ao confirmar as cavidades, o processamento compara a região efetivamente removida por cada drenagem com o encaixe e seu reforço. Drenagens que interferem são fechadas por completo, reconstruindo a peça a partir da casca original sem furos. As demais são preservadas.
 
-Cada cavidade de uma peça oca recebe um furo central com raio de 30% do raio final do encaixe (incluindo a folga diametral). Exemplo: encaixe com diâmetro de 12,2 mm gera drenagem de 3,66 mm de diâmetro. O furo atravessa o fundo até o primeiro vazio interno; a saída inteira é conferida para não perfurar a parede oposta. Uma direção sem espaço interno suficiente produz uma mensagem específica.
+Cada cavidade com vazio interno próximo recebe um furo central com raio de 30% do raio final do encaixe (incluindo a folga diametral). Exemplo: encaixe com diâmetro de 12,2 mm gera drenagem de 3,66 mm de diâmetro. O furo atravessa o fundo até o primeiro vazio interno; a saída inteira é conferida para não perfurar a parede oposta. A drenagem só é criada quando o primeiro vazio interno aparece dentro da espessura de parede configurada, com tolerância numérica de 0,02 mm, em todo o disco de amostragem. Ao substituir uma drenagem existente, o limite também considera a profundidade projetada do furo original que cruza o encaixe ou seu reforço e está alinhado à sua normal (produto escalar mínimo de 0,9). Isso permite respeitar a espessura real de regiões curvas, sem buscar um vazio além do alcance do furo original. Furos substituídos por outro encaixe não ampliam esse limite. Se uma drenagem interferente não puder ser substituída com segurança, a operação é recusada, preservando a peça anterior, em vez de fechar o furo silenciosamente. Em regiões sólidas, bloqueadas ou com vazio distante, o encaixe é criado sem drenagem automática e o resumo informa a quantidade. A profundidade do encaixe e o reforço não ampliam essa distância de busca. Se houver um vazio próximo, mas o fundo ultrapassar esse vazio, a operação é recusada para proteger a parede oposta.
 
 Mover, excluir ou desfazer uma cavidade recalcula o resultado desde a peça original e restaura as drenagens que deixaram de interferir. A prévia do cilindro é ocultada ao conferir o corte para mostrar o resultado real sem superfícies sobrepostas.
 
@@ -47,9 +49,9 @@ Mover, excluir ou desfazer uma cavidade recalcula o resultado desde a peça orig
 
 - Contêiner LYS 3.1.0 e malhas binárias versão 2, como no exemplo do Lychee 7.6.4 analisado.
 - Um objeto de arquivo, sem escala aplicada na cena.
-- Escavação com malha interna armazenada no projeto.
-- Até 100 furos cilíndricos, com posição e normal explícitas.
-- Sem preenchimento interno ativo, bloqueadores de escavação ativos na peça ou operações booleanas de cena. Configurações de preenchimento e bloqueadores salvas com a escavação desativada não impedem a importação. Bloqueadores explicitamente desativados ou associados a outro objeto são ignorados.
+- Escavação com malha interna armazenada no projeto, incluindo o resultado dos bloqueadores de escavação. A malha calculada é usada diretamente, sem reaplicar os bloqueadores.
+- Até 100 drenagens cilíndricas nativas na saída, com posição e normal explícitas. Os encaixes ficam na malha externa.
+- Sem preenchimento interno ativo ou operações booleanas de cena. Configurações de preenchimento salvas com a escavação desativada não impedem a importação. Escavação ativa exige uma malha interna válida; sem ela, o projeto deve ser recalculado e salvo no Lychee.
 - Até 200 MB e 3 milhões de triângulos; esses limites não garantem desempenho.
 
 Variantes não suportadas são recusadas com uma mensagem; não há descarte silencioso desses modificadores.
@@ -82,3 +84,19 @@ Em `Left_Arm-imas (1).lys`, 8 pontas perderam contato ao criar o encaixe. A corr
 ## Exportação com contatos pendentes (0.4.3)
 
 Uma ponta sem reconexão automática não bloqueia mais todo o LYS. A cena exportada combina as pontas reconectadas com os registros originais dos contatos pendentes. O aviso permanece junto ao link de download até uma nova alteração ou exportação. A drenagem permanece aberta: não há tentativa de alongar uma ponta através dela até uma parede distante. Exportar com aviso não significa que todos os suportes foram corrigidos.
+
+## Bloqueadores com malha interna calculada
+
+Validação local em 15/11/2026 com `Legs_zelda.lys`, salvo pelo Lychee 8.0.3: dois bloqueadores cúbicos, parede configurada de 2 mm, oito drenagens e 784 registros de suportes. A interseção do vazio armazenado com os bloqueadores foi nula dentro da tolerância numérica, confirmando que essas regiões já estavam excluídas da escavação.
+
+A importação resultou em sólido válido com 917.330 triângulos. Uma cavidade de teste removeu aproximadamente 0,336 mm³. A exportação e reimportação preservaram o volume com diferença inferior a 0,00004 mm³, os registros de suportes, a base, a posição, a rotação e a escala. Nenhum contato precisou de ajuste nesse corte. Os testes sintéticos também verificam a preservação do material bloqueado, do vazio e da drenagem, a limpeza dos modificadores na cópia e a recusa de malha interna ausente ou inválida. O arquivo real não integra o repositório; essa verificação não inclui reabertura ou fatiamento no Lychee.
+
+## Posicionamento sobre drenagens
+
+A prévia da cavidade e o clique usam a superfície externa original do LYS, anterior à abertura das drenagens. Assim, posicionar ou reposicionar um ímã sobre um furo mantém o encaixe na superfície de entrada, sem atravessar o vazio e atingir a parede interna ou o outro lado da peça. Essa superfície é usada apenas para posicionamento; a visualização e os cortes continuam usando a malha com as drenagens. Importar outra peça libera a superfície anterior. STL usa a própria malha, pois não fornece a superfície anterior aos furos.
+
+## Exportação com escavação nativa
+
+A interface conserva o par de malhas externa/interna, os parâmetros de escavação, os bloqueadores e a tabela de furos. Os ímãs ficam como cavidades reais na malha externa; somente as drenagens centrais ficam como modificadores nativos. A malha interna recebe os reforços antes da aplicação das drenagens. Os testes comparam os sólidos exportados/reimportados com a prévia, verificam as duas malhas, parâmetros, furos substituídos, identificadores, suportes reconectados, encaixes rasos sem reforço e drenagem menor que 0,5 mm. Saídas antigas já consolidadas não permitem recuperar a configuração anterior; para preservá-la, reimporte o LYS original. A leitura visual e o fatiamento desta nova saída ainda precisam de confirmação no Lychee.
+
+Para manter exterior e interior como superfícies fechadas separadas, um encaixe que atinja o vazio interno precisa de reforço/fundo. Nesse caso, desativar o reforço continua permitindo a prévia e o STL, mas a exportação LYS pede para ativar o reforço ou reduzir a profundidade. A ferramenta não substitui o encaixe por um objeto de drenagem.
