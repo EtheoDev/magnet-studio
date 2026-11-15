@@ -49,7 +49,7 @@ Mover, excluir ou desfazer uma cavidade recalcula o resultado desde a peça orig
 - Um objeto de arquivo, sem escala aplicada na cena.
 - Escavação com malha interna armazenada no projeto.
 - Até 100 furos cilíndricos, com posição e normal explícitas.
-- Sem preenchimento interno, bloqueadores de escavação ou operações booleanas de cena.
+- Sem preenchimento interno ativo, bloqueadores de escavação ativos na peça ou operações booleanas de cena. Configurações de preenchimento e bloqueadores salvas com a escavação desativada não impedem a importação. Bloqueadores explicitamente desativados ou associados a outro objeto são ignorados.
 - Até 200 MB e 3 milhões de triângulos; esses limites não garantem desempenho.
 
 Variantes não suportadas são recusadas com uma mensagem; não há descarte silencioso desses modificadores.

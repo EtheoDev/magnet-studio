@@ -1,6 +1,6 @@
 # MagnetLab
 
-Editor web de cavidades cilíndricas para ímãs em STL e projetos LYS. Versão 0.4.5 experimental: 13 de outubro de 2026.
+Editor web de cortes por pintura, assentamentos, chaves mecânicas e cavidades para ímãs em STL e projetos LYS. Versão 0.6.0 experimental: 14 de outubro de 2026.
 
 ## Executar localmente
 
@@ -18,6 +18,8 @@ Abra a URL mostrada no terminal. O modelo de demonstração é carregado automat
 ```sh
 npm test          # verificação da geometria e exportação
 npm run benchmark # esfera sintética com mais de 300 mil triângulos
+npm run benchmark:paint # seleção por faces acima de dois milhões de triângulos
+npm run benchmark:paint-solid # separação, chave, passagem e STL na mesma escala
 npm run build    # site estático em dist/
 npm run preview  # prévia da compilação de produção
 ```
@@ -30,6 +32,9 @@ Malhas legíveis com defeitos abrem para inspeção. O painel “Reparar malha�
 
 ## O que está implementado
 
+- Corte anatômico por pintura: pincel visível e conectado, apagar, histórico, inversão e prévia de suavização.
+- Contornos, assentamentos complementares, chaves redondas/retangulares/afuniladas e inversão de macho/fêmea.
+- Folgas dimensionais, verificação de paredes e passagem de montagem, prévias e exportação de cada peça STL.
 - STL binário e ASCII; conversão de mm, cm e polegadas.
 - Visualização 3D com órbita, enquadramento, vista superior, malha e corte visual.
 - Clique sobre a superfície, alinhamento pela normal do triângulo e cilindro de prévia.
@@ -37,7 +42,11 @@ Malhas legíveis com defeitos abrem para inspeção. O painel “Reparar malha�
 - Subtração de sólidos com Manifold em Web Worker e exportação STL binária.
 - Validação topológica inicial, mensagens de erro e guia de uso.
 
-## Limitações da versão 0.4.5
+## Corte por pintura
+
+Escolha **Corte por pintura** no painel esquerdo e clique na parte desejada. Ajuste a proposta, que inclui o verso, confirme e use o pincel para corrigir a borda se necessário. Confira o contorno e prepare o assentamento. O guia [CORTE-PINTURA.md](docs/CORTE-PINTURA.md) detalha seleção, posição e rotação da chave, folgas, exportação, desempenho e os contornos que precisam de correção antes de separar.
+
+## Limitações das cavidades para ímãs
 
 A aprovação topológica não é uma auditoria completa de auto-interseções ou de fabricação. A ferramenta não verifica automaticamente se uma cavidade rompe a lateral ou o fundo da peça. O corte visual não adiciona tampa à seção. A orientação segue o triângulo clicado, sem suavização regional ou inclinação manual. Não há persistência de projeto: recarregar ou importar outra peça descarta as cavidades. A importação e o reparo de STL não têm teto fixo de triângulos, tamanho de arquivo ou tempo de processamento. A capacidade prática depende da memória disponível e dos limites do navegador/WASM. Os limites de 3 milhões de triângulos e 200 MB continuam apenas no formato LYS experimental.
 
@@ -49,6 +58,9 @@ A aprovação topológica não é uma auditoria completa de auto-interseções o
 - `src/repair-advanced.js`: reparo de conexões e contornos complexos, com comparação de superfície.
 - `src/repair-solid.js`: tentativa simples, fallback avançado e validação do sólido.
 - `src/geometry.worker.js`: processamento pesado e construção da BVH.
+- `src/paint-selection.js` e `src/paint-brush.js`: seleção por faces, histórico e pincel pela superfície.
+- `src/paint-cut.js` e `src/paint-validation.js`: assentamentos, chaves e passagem contínua.
+- `src/paint-ui.js`: fluxo de pintura e prévias das peças.
 - `src/style.css`: interface responsiva.
 - `tests/`: testes numéricos e benchmark reproduzível.
 - `docs/`: documentação técnica e plano de evolução.
@@ -73,3 +85,6 @@ Na versão 0.4.3, contatos de suporte que não puderam ser reconectados deixam d
 Removidos os tetos de um milhão de triângulos no reparo, três milhões/200 MB na importação STL e o encerramento automático de operações após 120 segundos. Arrays compactos reduzem cópias durante indexação, limpeza e fechamento. As verificações de integridade e os critérios de preservação da superfície continuam aplicados. Execute `npm run benchmark:repair-large` para validar uma malha sintética acima de três milhões de triângulos.
 
 Na versão 0.4.5, aberturas residuais minúsculas que o motor avançado não conseguiu triangular recebem uma tentativa complementar, mantendo as verificações de superfície e sólido. Consulte o guia de reparo para os critérios e a validação.
+## Estúdio com seleção por cores
+
+O estúdio mantém o tema preto e importa 3MF com cores padrão ou pintura compactada de Bambu Studio, OrcaSlicer e PrusaSlicer, preservando as subdivisões e identificando os filamentos. Selecione regiões por clique ou pela paleta, use laço e plano de corte, salve projetos `.magnetlab` e exporte as peças em ZIP. Consulte [o guia e os limites de compatibilidade](docs/STUDIO.md).

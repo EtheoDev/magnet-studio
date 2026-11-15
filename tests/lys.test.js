@@ -85,6 +85,48 @@ test('LYS rejects unsupported scale, multiple objects and modifiers without sile
     [s=>s.holes.present.byId.h1.settings.type='square',/furo/]
   ])await assert.rejects(importLys(m,await fixture(edit)),pattern);
 });
+test('LYS imports solid objects with inactive hollowing settings and roundtrips their geometry',async()=>{
+  for(const hollowing of [undefined,{enabled:false,infillEnabled:true}]){
+    const p=await importLys(m,await fixture(s=>{
+      s.objects.present.byId.o1.hollowing=hollowing;
+      s.objects.present.byId.o1.hollowBlockers=['b1'];
+      s.hollowBlockers={present:{byId:{b1:{id:'b1',objectId:'o1'}}}};
+    }));
+    try{
+      assert.equal(p.info.wall,null);
+      assert.ok(p.solid.volume()>7900,'Inactive hollowing must not remove the inner mesh');
+      const output=await exportLys(p.project,fromManifold(p.solid));
+      const again=await importLys(m,output);
+      try{
+        assert.ok(Math.abs(again.solid.volume()-p.solid.volume())<.001);
+        assert.equal(again.project.scene.objects.present.byId.o1.hollowing.infillEnabled,false);
+        assert.deepEqual(again.project.scene.supports,p.project.scene.supports);
+      }finally{free(again);}
+      assert.deepEqual(p.project.scene.objects.present.byId.o1.hollowing,hollowing??null);
+    }finally{free(p);}
+  }
+});
+test('LYS ignores disabled and unrelated blockers but rejects active or unknown blockers',async()=>{
+  for(const blocker of [{id:'b1',objectId:'o1',enabled:false},{id:'b1',objectId:'other'}]){
+    const p=await importLys(m,await fixture(s=>{
+      s.hollowBlockers={present:{byId:{b1:blocker}}};
+      s.objects.present.byId.o1.hollowBlockers=['b1'];
+    }));
+    try{assert.equal(p.info.wall,2);assert.ok(p.solid.volume()<3904);}finally{free(p);}
+  }
+  for(const blocker of [{id:'b1',objectId:'o1'},{id:'b1'}]){
+    await assert.rejects(importLys(m,await fixture(s=>{
+      s.hollowBlockers={present:{byId:{b1:blocker}}};
+    })),/bloqueadores de escavação ativos/);
+  }
+  await assert.rejects(importLys(m,await fixture(s=>{
+    s.objects.present.byId.o1.hollowBlockers=['missing'];
+  })),/bloqueadores de escavação ativos/);
+  await assert.rejects(importLys(m,await fixture(s=>{
+    s.objects.present.byId.o1.hollowing={enabled:false,infillEnabled:true};
+    s.objects.present.byId.o1.hasHollowing2D=true;
+  })),/preenchimento interno ativo/);
+});
 test('LYS mesh decoder rejects bad indices and nonfinite coordinates',()=>{
   const cube=m.Manifold.cube([2,2,2]),data=fromManifold(cube);cube.delete();
   const indices=writeLysMesh(data);new DataView(indices.buffer).setUint32(20,99999,true);assert.throws(()=>readLysMesh(indices),/Índice/);

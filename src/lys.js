@@ -81,6 +81,16 @@ function combineMeshes(a,b) {
   return {positions,indices};
 }
 
+function hasActiveHollowBlockers(scene,object) {
+  const blockers=scene.hollowBlockers?.present?.byId||{};
+  const applies=blocker=>blocker?.enabled!==false && (!blocker?.objectId||blocker.objectId===object.id);
+  return Object.values(blockers).some(applies) || (Array.isArray(object.hollowBlockers) && object.hollowBlockers.some(ref=>{
+    // Keep unknown references conservative, but ignore explicitly disabled ones.
+    const blocker=typeof ref==='object'&&ref!==null?ref:blockers[ref];
+    return applies(blocker);
+  }));
+}
+
 // Version one intentionally handles one unscaled object. Unsupported modifiers
 // must fail explicitly rather than silently produce a different print.
 export async function importLys(module,buffer) {
@@ -90,7 +100,11 @@ export async function importLys(module,buffer) {
   const object=objects[0];
   if(object.type!=='file'||object.isHole||object.isOperationObject||!['none',undefined].includes(object.booleanMode))fail('Este LYS usa operações de objeto ainda não suportadas.');
   if(object.scale && (!finiteVector(object.scale)||xyz(object.scale).some(v=>Math.abs(v-1)>1e-8)))fail('Aplique a escala à peça no Lychee antes de salvar este LYS.');
-  if(object.hollowing?.infillEnabled || records(scene.hollowBlockers).length || object.hollowBlockers?.length)fail('LYS com preenchimento interno ou bloqueadores de escavação ainda não é suportado.');
+  // Lychee can retain hollowing options even when hollowing is turned off.
+  // Saved defaults and disabled/unrelated blockers do not modify this mesh.
+  const usesHollowing=!!(object.hollowing?.enabled||object.hasHollowing2D);
+  if(usesHollowing&&object.hollowing?.infillEnabled)fail('Este LYS tem preenchimento interno ativo. Desative o preenchimento no Lychee e salve novamente, ou exporte um STL com a geometria aplicada.');
+  if(usesHollowing&&hasActiveHollowBlockers(scene,object))fail('Este LYS tem bloqueadores de escavação ativos. Exporte um STL com a geometria aplicada no Lychee.');
   const stem=object.properties?.hash;
   if(typeof stem!=='string'||!entries.has(stem+'.bin'))fail('Não foi possível associar a peça à sua malha no LYS.');
   const outer=readLysMesh(entries.get(stem+'.bin'));
@@ -144,7 +158,7 @@ export async function exportLysWithReport(project,data,options={}) {
   const scene=prepared.scene,object=scene.objects.present.byId[project.objectId];
   const meshBytes=writeLysMesh(data),stem=(await hash(meshBytes)).slice(0,32);
   object.properties={...object.properties,hash:stem,watch:false,size:(84+50*data.indices.length/3)/1_000_000};
-  object.hollowing={...object.hollowing,enabled:false};object.hasHollowing2D=false;object.holes=[];
+  object.hollowing={...object.hollowing,enabled:false,infillEnabled:false};object.hasHollowing2D=false;object.holes=[];
   object.stats={...object.stats,polyCount:data.indices.length/3,vertexCount:data.positions.length/3,numHoles:0,manifold:true,hasStructuralErrors:false};
   // Holes are already present in the edited mesh; don't apply them a second time.
   if(scene.holes?.present) {
