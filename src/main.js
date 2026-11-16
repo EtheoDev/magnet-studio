@@ -6,6 +6,7 @@ import { createIcons, Upload, ShieldCheck, CircleHelp, Box, CheckCircle2, Plus, 
 import { cavityDimensions, validateCavity, toGeometry, LIMITS } from './geometry.js';
 import { validateRepairOptions } from './repair.js';
 import { pickCavitySurface } from './cavity-placement.js';
+import { createCavityGuides } from './cavity-guides.js';
 
 const icons = { Upload, ShieldCheck, CircleHelp, Box, CheckCircle2, Plus, RotateCcw, Scan, Square, Network, Slice, Mouse, SlidersHorizontal, Move, Trash2, Info, Check, Download, Undo2, Redo2, Disc3, Wrench };
 const $ = id => document.getElementById(id);
@@ -61,6 +62,8 @@ const modelMaterial=new THREE.MeshStandardMaterial({color:0x9fabb7,metalness:.18
 const clipPlane=new THREE.Plane(new THREE.Vector3(-1,0,0),0);
 const raycaster=new THREE.Raycaster(); raycaster.firstHitOnly=true;
 const pointer=new THREE.Vector2();
+const alignmentGuides=createCavityGuides(scene,camera,$('canvas-host'));
+let previewFrame=null,previewPointer=null;
 THREE.Mesh.prototype.raycast=acceleratedRaycast;
 function attachTree(data) { const g=toGeometry(data);g.boundsTree=MeshBVH.deserialize(data.bvh,g);return g; }
 function fit(top=false) {
@@ -129,12 +132,12 @@ function marker(c,preview=false){
 }
 function disposeGroup(g){scene.remove(g);g.traverse(o=>{o.geometry?.dispose();if(o.material)o.material.dispose();});}
 function makeMarkers(){markerGroups.forEach(disposeGroup);markerGroups=state.cavities.map(c=>{const g=marker(c);scene.add(g);return g;});}
-function clearGhost(){if(ghost){disposeGroup(ghost);ghost=null;}hoverHit=null;}
+function clearGhost(){if(previewFrame!==null)cancelAnimationFrame(previewFrame);previewFrame=null;previewPointer=null;if(ghost){disposeGroup(ghost);ghost=null;}hoverHit=null;alignmentGuides.clear();}
 function setPlacement(on,reposition=false){
   if(on){if(!state.meshValid){toast('Repare a malha antes de posicionar cavidades.',true);return;}try{validParams();}catch(e){toast(e.message,true);return;}state.section=false;updateSection();if(!reposition){state.selected=null;renderSettings();renderCavities();}}
   state.placing=on;state.reposition=on&&reposition;controls.enableRotate=!on;clearGhost();
   $('add').classList.toggle('active',on);$('view-mode').textContent=on?'POSICIONAR NA SUPERFÍCIE':'MODO DE INSPEÇÃO';
-  $('hint').textContent=on?'Clique na peça para posicionar · Esc para sair · Botão direito para mover':'Arraste para girar · Scroll para aproximar · Botão direito para mover';
+  $('hint').textContent=on?'Compare as folgas das guias · Clique para posicionar · Esc para sair':'Arraste para girar · Scroll para aproximar · Botão direito para mover';
   renderer.domElement.style.cursor=on?'crosshair':'grab';syncButtons();
 }
 function hitAt(event){
@@ -143,8 +146,18 @@ function hitAt(event){
   return pickCavitySurface(raycaster,baseMesh,placementMesh);
 }
 renderer.domElement.addEventListener('pointermove',e=>{
-  if(!state.placing||state.busy)return;clearGhost();const hit=hitAt(e);if(!hit)return;
-  try{const c={...params(),...hit};validateCavity(c);ghost=marker(c,true);scene.add(ghost);hoverHit=hit;}catch{}
+  if(!state.placing||state.busy)return;
+  previewPointer={clientX:e.clientX,clientY:e.clientY};
+  if(previewFrame!==null)return;
+  previewFrame=requestAnimationFrame(()=>{
+    const event=previewPointer;previewFrame=null;clearGhost();
+    if(!event||!state.placing||state.busy)return;
+    const hit=hitAt(event);if(!hit)return;
+    try{
+      const c={...params(),...hit};validateCavity(c);ghost=marker(c,true);scene.add(ghost);hoverHit=hit;
+      alignmentGuides.show(placementMesh||baseMesh,c,cavityDimensions(c).diameter/2);
+    }catch{}
+  });
 });
 renderer.domElement.addEventListener('pointerleave',clearGhost);
 renderer.domElement.addEventListener('pointerdown',e=>{down={x:e.clientX,y:e.clientY,button:e.button};});
@@ -287,5 +300,5 @@ window.addEventListener('dragenter',e=>{if(e.dataTransfer.types.includes('Files'
 window.addEventListener('dragover',e=>e.preventDefault());window.addEventListener('dragleave',()=>{dragDepth--;if(dragDepth<=0)$('drop-overlay').hidden=true;});
 window.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;$('drop-overlay').hidden=true;if(e.dataTransfer.files[0]&&!state.busy)loadModel('import',e.dataTransfer.files[0]);});
 window.addEventListener('beforeunload',e=>{if(state.cavities.length){e.preventDefault();e.returnValue='';}});
-function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera);}animate();
+function animate(){requestAnimationFrame(animate);controls.update();alignmentGuides.updateLabels();renderer.render(scene,camera);}animate();
 refreshIcons();renderCavities();updateDimensions();initializeWorker();loadModel('demo');

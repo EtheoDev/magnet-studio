@@ -114,10 +114,13 @@ test('LYS imports cached hollowing with blocker metadata',async()=>{
     }));
     try{assert.equal(p.info.wall,2);assert.ok(p.solid.volume()<3904);}finally{free(p);}
   }
-  await assert.rejects(importLys(m,await fixture(s=>{
+  const inactive=await readLysContainer(await fixture(s=>{
     s.objects.present.byId.o1.hollowing={enabled:false,infillEnabled:true};
     s.objects.present.byId.o1.hasHollowing2D=true;
-  })),/preenchimento interno ativo/);
+  }));
+  inactive.entries.delete('mesh_hollowing.bin');
+  const p=await importLys(m,await writeLysContainer(inactive.manifest,inactive.entries));
+  try{assert.equal(p.info.wall,null);assert.ok(p.solid.volume()>7900);}finally{free(p);}
 });
 test('LYS preserves baked blocker material, drains and supports through export',async()=>{
   const p=await importLys(m,await fixture((s,{inner})=>{
@@ -439,4 +442,39 @@ test('A solid LYS exports the magnet recess in its mesh with no native hole obje
     const outer=toManifold(m,cut.nativeGeometry.outer);
     try{assert.ok(boxVolume(outer,[0,0,8],[1,1,1])<1e-6);assert.ok(boxVolume(outer,[0,0,6],[1,1,1])>.99);}finally{outer.delete();}
   }finally{cut?.solid.delete();free(p);}
+});
+
+test('Mirrored and uniformly scaled LYS keep physical dimensions, native holes and local support contacts through editing',async()=>{
+  const baseline=await importLys(m,await fixture());const volume=baseline.solid.volume();free(baseline);
+  for(const scale of [[-1,1,1],[1,-1,1],[1,1,-1],[-1,-1,-1],[2,2,2],[-2,2,2],[.5,.5,.5]]){
+    const s=Math.abs(scale[0]);
+    const p=await importLys(m,await fixture(scene=>{
+      scene.objects.present.byId.o1.scale={x:scale[0],y:scale[1],z:scale[2]};
+      scene.supports.present.byId.s1={id:'s1',objectIdTip:'o1',tip:{x:2,y:0,z:10},tipNormal:{x:0,y:0,z:1},base:{x:2,y:0,z:20},parentTipId:null,parentBaseId:'trunk',settings:{tip:{type:'cone',length:3,angle:100,pointDiameter:.6,penetration:0},base:{diameter:1.3}}};
+    }));let cut;
+    try{
+      assert.deepEqual(p.data.size,[20*s,20*s,20*s]);
+      assert.equal(p.info.wall,2*s);
+      assert.ok(Math.abs(p.solid.volume()-volume*s**3)<.001);
+      assert.deepEqual(p.project.drains[0].point.map(x=>x||0),[8*scale[0],0,10*scale[2]]);
+      const c={...pocket,point:[0,0,10*scale[2]],normal:[0,0,Math.sign(scale[2])]};
+      for(const key of ['diameter','thickness','diameterAllowance','depthAllowance','wall','bottom'])c[key]*=s;
+      cut=cutLysCavities(m,p.solid,[c],p.envelope,p.project);
+      const {scene,supportReport}=await assertNativeRoundtrip(p,cut);
+      assert.deepEqual(scene.objects.present.byId.o1.scale,{x:scale[0],y:scale[1],z:scale[2]});
+      assert.equal(supportReport.adjusted,1);
+      assert.ok(Math.abs(scene.supports.present.byId.s1.tip.z-6.9)<1e-4,'Support returns to the mesh-local contact before export');
+      assert.deepEqual(scene.supports.present.byId.s1.base,p.project.scene.supports.present.byId.s1.base);
+      const stl=parseSTL(binarySTL(fromManifold(cut.solid)));
+      for(const size of stl.size)assert.ok(Math.abs(size-20*s)<1e-5,'STL keeps the physical dimensions');
+      const baked=await importLys(m,await exportLys(p.project,fromManifold(cut.solid)));
+      try{assert.ok(Math.abs(baked.solid.volume()-cut.solid.volume())<.001);assert.deepEqual(baked.data.size,p.data.size);}finally{free(baked);}
+    }finally{cut?.solid.delete();free(p);}
+  }
+});
+
+test('LYS refuses zero, nonfinite and nonuniform scales without changing geometry',async()=>{
+  for(const scale of [{x:0,y:1,z:1},{x:NaN,y:1,z:1},{x:2,y:1,z:1}]){
+    await assert.rejects(importLys(m,await fixture(s=>{s.objects.present.byId.o1.scale=scale;})),/escala/);
+  }
 });

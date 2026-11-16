@@ -33,6 +33,7 @@ Malhas legíveis com defeitos abrem para inspeção. O painel “Reparar malha�
 - STL binário e ASCII; conversão de mm, cm e polegadas.
 - Visualização 3D com órbita, enquadramento, vista superior, malha e corte visual.
 - Clique sobre a superfície, alinhamento pela normal do triângulo e cilindro de prévia.
+- Guias na superfície durante o posicionamento e reposicionamento: quatro folgas em milímetros e indicação visual de equilíbrio entre os lados.
 - Múltiplas cavidades, parâmetros individuais, reposicionamento, exclusão e desfazer/refazer.
 - Subtração de sólidos com Manifold em Web Worker e exportação STL binária.
 - Validação topológica inicial, mensagens de erro e guia de uso.

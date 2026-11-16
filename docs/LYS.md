@@ -48,7 +48,7 @@ Mover, excluir ou desfazer uma cavidade recalcula o resultado desde a peça orig
 ## Compatibilidade atual
 
 - Contêiner LYS 3.1.0 e malhas binárias versão 2, como no exemplo do Lychee 7.6.4 analisado.
-- Um objeto de arquivo, sem escala aplicada na cena.
+- Um objeto de arquivo, com escala uniforme positiva e/ou espelhamento nos eixos. Escalas não uniformes ou nulas são recusadas.
 - Escavação com malha interna armazenada no projeto, incluindo o resultado dos bloqueadores de escavação. A malha calculada é usada diretamente, sem reaplicar os bloqueadores.
 - Até 100 drenagens cilíndricas nativas na saída, com posição e normal explícitas. Os encaixes ficam na malha externa.
 - Sem preenchimento interno ativo ou operações booleanas de cena. Configurações de preenchimento salvas com a escavação desativada não impedem a importação. Escavação ativa exige uma malha interna válida; sem ela, o projeto deve ser recalculado e salvo no Lychee.
@@ -100,3 +100,15 @@ A prévia da cavidade e o clique usam a superfície externa original do LYS, ant
 A interface conserva o par de malhas externa/interna, os parâmetros de escavação, os bloqueadores e a tabela de furos. Os ímãs ficam como cavidades reais na malha externa; somente as drenagens centrais ficam como modificadores nativos. A malha interna recebe os reforços antes da aplicação das drenagens. Os testes comparam os sólidos exportados/reimportados com a prévia, verificam as duas malhas, parâmetros, furos substituídos, identificadores, suportes reconectados, encaixes rasos sem reforço e drenagem menor que 0,5 mm. Saídas antigas já consolidadas não permitem recuperar a configuração anterior; para preservá-la, reimporte o LYS original. A leitura visual e o fatiamento desta nova saída ainda precisam de confirmação no Lychee.
 
 Para manter exterior e interior como superfícies fechadas separadas, um encaixe que atinja o vazio interno precisa de reforço/fundo. Nesse caso, desativar o reforço continua permitindo a prévia e o STL, mas a exportação LYS pede para ativar o reforço ou reduzir a profundidade. A ferramenta não substitui o encaixe por um objeto de drenagem.
+
+## Escala e espelhamento
+
+A prévia e os cortes usam a escala uniforme e os sinais dos eixos do objeto, em milímetros reais. Reflexões têm a ordem dos vértices corrigida para conservar a orientação das superfícies externa e interna. Posições, normais e medidas das drenagens acompanham essa transformação.
+
+Na saída LYS, as malhas e os furos retornam às coordenadas locais originais e o registro de escala do Lychee é preservado, junto da posição e rotação. A reconexão dos suportes ocorre nessas coordenadas locais, conservando as junções das hastes e as medidas nativas. A exportação STL usa as dimensões físicas da prévia. Uma marca de escavação 2D remanescente não ativa a escavação quando `hollowing.enabled` está explicitamente desativado.
+
+## Guias de centralização na superfície
+
+Ao passar a prévia de uma cavidade sobre a peça, quatro linhas acompanham a superfície local nas direções da vista. Os rótulos mostram folgas aproximadas a partir da borda do encaixe, em milímetros. Cada par fica verde quando suas duas folgas diferem em até 0,2 mm; vermelho indica que a borda do encaixe ultrapassa o limite encontrado. O limite acompanha bordas, interrupções e mudanças acentuadas de orientação da superfície local; não representa necessariamente a largura total de uma peça curva. Traçados que atingem o alcance máximo mostram “≥” e não indicam centralização.
+
+As guias aparecem também ao reposicionar. Saem ao confirmar, pressionar Esc ou retirar o cursor do modelo. No LYS, usam o exterior original para não atravessar as drenagens. Não alteram o clique, não movem a cavidade automaticamente e não integram a exportação. Essas medidas são auxiliares visuais por amostragem e não verificam espessura de parede ou resistência.

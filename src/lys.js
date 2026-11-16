@@ -1,6 +1,7 @@
 import { decode, encode } from '@msgpack/msgpack';
 import { LIMITS, toManifold, fromManifold, cutCavities, createDrainCutter } from './geometry.js';
 import { reconnectLysSupports } from './lys-supports.js';
+import { lysScale, scaleLysMesh, scaleLysHole } from './lys-transform.js';
 
 // Payload compatibility transform adapted from Open Resin Alliance's MIT parser.
 // See public/THIRD-PARTY-LYS.txt for attribution and the complete license.
@@ -81,7 +82,7 @@ function combineMeshes(a,b) {
   return {positions,indices};
 }
 
-// Version one intentionally handles one unscaled object. Unsupported modifiers
+// Handle one uniformly scaled or mirrored object. Unsupported modifiers
 // must fail explicitly rather than silently produce a different print.
 export async function importLys(module,buffer) {
   const project=await readLysContainer(buffer),{scene,entries}=project;
@@ -89,21 +90,24 @@ export async function importLys(module,buffer) {
   if(objects.length!==1)fail('Esta versão abre LYS com uma peça. Salve a peça isolada em outro projeto Lychee.');
   const object=objects[0];
   if(object.type!=='file'||object.isHole||object.isOperationObject||!['none',undefined].includes(object.booleanMode))fail('Este LYS usa operações de objeto ainda não suportadas.');
-  if(object.scale && (!finiteVector(object.scale)||xyz(object.scale).some(v=>Math.abs(v-1)>1e-8)))fail('Aplique a escala à peça no Lychee antes de salvar este LYS.');
+  const scale=lysScale(object.scale),magnitude=Math.abs(scale[0]);
   // Lychee can retain hollowing options even when hollowing is turned off.
   // Saved defaults and disabled/unrelated blockers do not modify this mesh.
-  const usesHollowing=!!(object.hollowing?.enabled||object.hasHollowing2D);
+  const usesHollowing=!!(object.hollowing?.enabled||(object.hollowing?.enabled!==false&&object.hasHollowing2D));
   if(usesHollowing&&object.hollowing?.infillEnabled)fail('Este LYS tem preenchimento interno ativo. Desative o preenchimento no Lychee e salve novamente, ou exporte um STL com a geometria aplicada.');
   const stem=object.properties?.hash;
   if(typeof stem!=='string'||!entries.has(stem+'.bin'))fail('Não foi possível associar a peça à sua malha no LYS.');
-  const outer=readLysMesh(entries.get(stem+'.bin'));
+  const outer=scaleLysMesh(readLysMesh(entries.get(stem+'.bin')),scale);
   const hollow=object.hollowing?.enabled;
-  if(object.hasHollowing2D&&!hollow)fail('Escavação 2D sem malha interna ainda não é suportada.');
+  if(object.hasHollowing2D&&!hollow&&object.hollowing?.enabled!==false)fail('Escavação 2D sem malha interna ainda não é suportada.');
   // The cached inner surface is the computed hollowing result, including the
   // regions kept solid by blockers. Do not regenerate or apply blockers twice.
   if(hollow&&!entries.has(stem+'_hollowing.bin'))fail('Este LYS não contém a malha interna calculada. Recalcule a escavação no Lychee e salve o projeto novamente.');
-  const inner=hollow?readLysMesh(entries.get(stem+'_hollowing.bin')):null;
-  const holes=records(scene.holes);
+  const inner=hollow?scaleLysMesh(readLysMesh(entries.get(stem+'_hollowing.bin')),scale):null;
+  const holes=records(scene.holes).map(h=>{
+    if(h.objectId!==object.id||h.settings?.type!=='cylinder'||h.stlMatrix||h.tipRotation||!finiteVector(h.tip)||!finiteVector(h.tipNormal)||Math.hypot(...xyz(h.tipNormal))<1e-8)fail('O LYS contém um tipo ou orientação de furo ainda não suportado.');
+    return scaleLysHole(h,scale);
+  });
   if(holes.length>100)fail('Este projeto excede o limite de 100 furos.');
   const drains=holes.map(h=>{
     if(h.objectId!==object.id||h.settings?.type!=='cylinder'||h.stlMatrix||h.tipRotation||!finiteVector(h.tip)||!finiteVector(h.tipNormal))fail('O LYS contém um tipo ou orientação de furo ainda não suportado.');
@@ -120,8 +124,8 @@ export async function importLys(module,buffer) {
     if(solid!==shell){shell.delete();shell=null;}
     const box=solid.boundingBox();
     const data={...fromManifold(solid),offset:[0,0,0],size:box.max.map((v,i)=>v-box.min[i])};
-    const info={name:object.name||'Peça LYS',appVersion:scene.appVersion,wall:hollow?object.hollowing.outer:null,drains:drains.length,supports:records(scene.supports).length,foundation:!!object.foundation?.enabled};
-    return {solid,envelope,data,project:{...project,objectId:object.id,stem,drains,info,undrained,contactSurface:data,nativeGeometry:{outer,inner,holes}},info};
+    const info={name:object.name||'Peça LYS',appVersion:scene.appVersion,wall:hollow?object.hollowing.outer*magnitude:null,drains:drains.length,supports:records(scene.supports).length,foundation:!!object.foundation?.enabled};
+    return {solid,envelope,data,project:{...project,objectId:object.id,stem,scale,drains,info,undrained,contactSurface:data,nativeGeometry:{outer,inner,holes}},info};
   }catch(error){if(solid&&solid!==shell)solid.delete();shell?.delete();envelope?.delete();throw error;}
 }
 
@@ -143,6 +147,8 @@ export async function writeLysContainer(manifest,entries) {
 
 async function exportNativeLys(project,prepared,native) {
   if(native.error)fail(native.error);
+  const inverse=(project.scale||[1,1,1]).map(x=>1/x);
+  native={...native,outer:scaleLysMesh(native.outer,inverse),inner:scaleLysMesh(native.inner,inverse),holes:native.holes.map(h=>scaleLysHole(h,inverse))};
   const scene=prepared.scene,object=scene.objects.present.byId[project.objectId];
   const outer=writeLysMesh(native.outer),inner=native.inner?writeLysMesh(native.inner):null;
   // Include the inner surface and holes in the cache identity as well.
@@ -167,8 +173,11 @@ async function exportNativeLys(project,prepared,native) {
 // The app passes nativeGeometry to retain separate outer/inner meshes and native
 // hole modifiers. Mesh-only callers can still request a baked geometry export.
 export async function exportLysWithReport(project,data,options={}) {
-  const prepared=reconnectLysSupports(project.scene,project.objectId,options.contactSurface||project.contactSurface||data,data);
+  const inverse=(project.scale||[1,1,1]).map(x=>1/x);
+  const localData=scaleLysMesh(data,inverse),contactSurface=scaleLysMesh(options.contactSurface||project.contactSurface||data,inverse);
+  const prepared=reconnectLysSupports(project.scene,project.objectId,contactSurface,localData);
   if(options.nativeGeometry)return exportNativeLys(project,prepared,options.nativeGeometry);
+  data=localData;
   // Unresolved contacts retain their original data. Export the remaining work
   // and report these contacts so the user can finish adjusting them in Lychee.
   const scene=prepared.scene,object=scene.objects.present.byId[project.objectId];
